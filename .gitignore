@@ -1,0 +1,6 @@
+# Grain
+*.gro
+*.wasm
+
+# Nix
+.direnv/
