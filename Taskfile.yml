@@ -4,8 +4,8 @@ version: '3'
 
 includes:
   intervalTree:
-    taskfile: ./intervalTree/Taskfile.yml
-    dir: ./intervalTree
+    taskfile: ./IntervalTree/Taskfile.yml
+    dir: ./IntervalTree
   quadTree:
     taskfile: ./QuadTree/Taskfile.yml
     dir: ./QuadTree
