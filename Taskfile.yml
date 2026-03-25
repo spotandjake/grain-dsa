@@ -15,6 +15,9 @@ includes:
   trie:
     taskfile: ./Trie/Taskfile.yml
     dir: ./Trie
+  BPlusTree:
+    taskfile: ./BPlusTree/Taskfile.yml
+    dir: ./BPlusTree
 
 tasks:
   default:
@@ -31,6 +34,7 @@ tasks:
       - task: quadTree:test
       # - task: ropeString:test
       # - task: trie:test
+      - task: BPlusTree:test
   format:
     desc: Formats the data structure impls
     cmds:
@@ -38,6 +42,7 @@ tasks:
       - task: quadTree:format
       - task: ropeString:format
       - task: trie:format
+      - task: BPlusTree:format
   doc:
     desc: Generates graindoc for the data structure impls
     cmds:
@@ -45,6 +50,7 @@ tasks:
       - task: quadTree:doc
       - task: ropeString:doc
       - task: trie:doc
+      - task: BPlusTree:doc
   clean:
     desc: Cleans up build artifacts
     cmds:
@@ -52,6 +58,7 @@ tasks:
       - task: quadTree:clean
       - task: ropeString:clean
       - task: trie:clean
+      - task: BPlusTree:clean
   lint:
     desc: Performs ci linting checks
     cmds:

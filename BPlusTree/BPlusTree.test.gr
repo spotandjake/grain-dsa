@@ -1,0 +1,56 @@
+module BPTreeTest
+
+from "./BPlusTree.gr" include BPTree
+from "List" include List
+from "Result" include Result
+from "Option" include Option
+
+let makeEntry = (k: BPTree.Key, v: a) => (k, v)
+let mkKey = (k: Number) => BPTree.Key.make(k)
+
+let t1 = BPTree.make(2)
+
+let r1 = makeEntry(mkKey(10), 100)
+assert Result.isOk(BPTree.insert(t1, r1))
+match (BPTree.search(t1, mkKey(10))) {
+  Some((_, data)) => assert data == 100,
+  None => fail "Search failed",
+}
+
+record User {
+  name: String,
+  id: Number,
+}
+let t2 = BPTree.make(2)
+let u1 = { name: "Alice", id: 1 }
+ignore(BPTree.insert(t2, makeEntry(mkKey(1), u1)))
+
+match (BPTree.search(t2, mkKey(1))) {
+  Some((_, data)) => assert data.name == "Alice",
+  None => fail "User record not found",
+}
+
+let t3 = BPTree.make(2)
+BPTree.bulkInsert(
+  t3,
+  List.map(k => makeEntry(mkKey(k), toString(k)), [1, 2, 3, 4])
+)
+assert t3.size == 4
+
+assert BPTree.delete(t3, mkKey(2)) == Ok(true)
+assert BPTree.search(t3, mkKey(2)) == None
+assert t3.size == 3
+
+let t4 = BPTree.make(2)
+BPTree.bulkInsert(
+  t4,
+  List.map(k => makeEntry(mkKey(k), k), [10, 20, 30, 40, 50])
+)
+let rangeResult = BPTree.range(t4, mkKey(20), mkKey(45))
+assert List.length(rangeResult) == 3 // 20, 30, 40
+
+let tA = BPTree.make(2)
+let tB = BPTree.make(2)
+ignore(BPTree.insert(tA, makeEntry(mkKey(5), "A")))
+ignore(BPTree.insert(tB, makeEntry(mkKey(5), "B")))
+assert Result.isErr(BPTree.merge(tA, tB))

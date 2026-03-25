@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  test:
+    desc: Tests the B+ tree impl
+    cmds:
+      - grain ./BPlusTree.test.gr
+  format:
+    desc: Formats the B+ tree impl
+    cmds:
+      - grain format ./BPlusTree.gr -o ./BPlusTree.gr
+      - grain format ./BPlusTree.test.gr -o ./BPlusTree.test.gr
+  doc:
+    desc: Generates graindoc for the B+ tree impl
+    cmds:
+      - grain doc ./BPlusTree.gr -o ./BPlusTree.md
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - rm -rf *.wasm
+      - rm -rf *.gro
+      - rm -rf ./BPlusTree.md

@@ -1,0 +1,790 @@
+module BPTree
+
+from "List" include List
+from "Number" include Number
+
+// TODO: Add documentation comments for all of these functions and types
+
+module Node {
+  abstract enum rec Node<key, value> {
+    Leaf{
+      // TODO: Make these arrays
+      keys: Box<List<key>>,
+      // TODO: Make these arrays
+      entries: Box<List<(key, value)>>,
+      // Technically we only need a pointer to the next leaf, but this is simpler
+      next: Box<Option<Node<key, value>>>,
+    },
+    Internal{
+      // TODO: Make these arrays
+      keys: Box<List<key>>,
+      // TODO: Make these arrays
+      children: Box<List<Node<key, value>>>,
+    },
+  }
+
+  // TODO: All of these functions should probably operate on the nodes themselves rather than distinct values
+
+  provide let makeEmptyLeaf = () =>
+    Leaf{ keys: box([]), entries: box([]), next: box(None) }
+  provide let makeInternal = (keys, children) =>
+    Internal{ keys: box(keys), children: box(children) }
+
+  provide let insertAt = (list, pos, item) => List.insert(pos, item, list)
+
+  provide let lowerBound = (keys, key) => {
+    let rec lowerBoundHelp = (keys, key, low, high) => {
+      if (low >= high) return low
+      let mid = Number.floor((low + high) / 2)
+      return match (keys) {
+        [] => low,
+        [k, ...rest] when compare(k, key) < 0 =>
+          lowerBoundHelp(rest, key, mid + 1, high),
+        [_, ...rest] => lowerBoundHelp(rest, key, low, mid),
+      }
+    }
+    // TODO: List.length is O(n) we may want to consider caching the size
+    lowerBoundHelp(keys, key, 0, List.length(keys))
+  }
+
+  provide let childIndex = (keys, key) => {
+    let rec childIndexHelp = (keys, key, index) => {
+      match (keys) {
+        [] => index,
+        [k, ...rest] when compare(k, key) > 0 => index,
+        [_, ...rest] => childIndexHelp(rest, key, index + 1),
+      }
+    }
+    childIndexHelp(keys, key, 0)
+  }
+
+  provide let nodeKeyCount = node => {
+    // TODO: List.length is O(n) we may want to consider caching the size
+    match (node) {
+      Leaf{ keys, _ } => List.length(unbox(keys)),
+      Internal{ keys, _ } => List.length(unbox(keys)),
+    }
+  }
+
+  // TODO: Link to this formula probably from the wiki
+  // TODO: fix this with correct value
+  provide let isFull = (node, minDegree) =>
+    nodeKeyCount(node) > 2 * minDegree - 1
+
+  provide let split = node => {
+    let count = nodeKeyCount(node)
+    let mid = Number.floor(count / 2)
+    // Split the node
+    match (node) {
+      Leaf{ keys, entries, next } => {
+        // Split the node
+        let (leftKeys, rightKeys) = List.part(mid, unbox(keys))
+        let (leftEntires, rightEntries) = List.part(mid, unbox(entries))
+        // Create our new right leaf
+        let rightLeaf = Leaf{
+          keys: box(rightKeys),
+          entries: box(rightEntries),
+          next: box(unbox(next)),
+        }
+        // Update the left leaf
+        keys := leftKeys
+        entries := leftEntires
+        next := Some(rightLeaf)
+        // Extract the promoted Key
+        let promotedKey = match (rightKeys) {
+          [] => fail "Impossible, splitLeaf right keys cannot be empty",
+          [k, ..._] => k,
+        }
+        (promotedKey, rightLeaf)
+      },
+      Internal{ keys, children } => {
+        // Split the node
+        // NOTE: We do `mid + 1` for the left side of the keys as we want to promote the middle key
+        let (leftKeys, rightKeys) = List.part(mid + 1, unbox(keys))
+        let (leftChildren, rightChildren) = List.part(mid, unbox(children))
+        // Find our promoted key
+        let (promotedKey, rightKeys) = match (rightKeys) {
+          [] => fail "Impossible, splitInternal right keys cannot be empty",
+          [k, ...rest] => (k, rest),
+        }
+        // Create our new right internal node
+        let rightNode = Internal{
+          keys: box(rightKeys),
+          children: box(rightChildren),
+        }
+        // Update the left internal node
+        keys := leftKeys
+        children := leftChildren
+        // Return the promoted key and new right node
+        (promotedKey, rightNode)
+      },
+    }
+  }
+
+  provide let rec findLeaf = (node, key) => {
+    match (node) {
+      Leaf{ _ } => Some(node),
+      Internal{ keys, children } => {
+        let index = childIndex(unbox(keys), key)
+        match (List.nth(index, unbox(children))) {
+          // TODO: It probably makes sense to return an enum from an error enum here
+          None => None,
+          Some(child) => findLeaf(child, key),
+        }
+      },
+    }
+  }
+
+  provide let search = (node, key) => {
+    match (findLeaf(node, key)) {
+      Some(Leaf{ keys, entries, _ }) => {
+        let index = lowerBound(unbox(keys), key)
+        match (List.nth(index, unbox(keys))) {
+          // TODO: I don't like how we may have the key but may not have an entry
+          // TODO: We should consider storing just entries
+          Some(k) when compare(k, key) == 0 => List.nth(index, unbox(entries)),
+          _ => None,
+        }
+      },
+      // NOTE: Theoretically this can be Some(Internal) or None however it will only be None
+      _ => None,
+    }
+  }
+}
+
+/** A B+ tree. */
+abstract record BPlusTree<key, value> {
+  // TODO: Document what this is
+  minDegree: Number,
+  /** The root node of our B+ tree. */
+  mut root: Node.Node<key, value>,
+  // TODO: Document what this means
+  mut size: Number,
+}
+
+provide let make = minDegree => {
+  { minDegree, root: Node.makeEmptyLeaf(), size: 0 }
+}
+
+provide let search = (key, tree) => Node.search(tree.root, key)
+
+provide let insert = (key, value, tree) => {
+  // Split the root if we are full
+  if (Node.isFull(tree.root, tree.minDegree)) {
+    let (promotedKey, newNode) = Node.split(tree.root)
+    tree.root = Node.makeInternal([promotedKey], [tree.root, newNode])
+  }
+
+  // TODO: Figure out a clean refactor for this
+  let rec insertHelper = node => {
+    match (node) {
+      Node.Leaf(l) => {
+        let index = BPNode.lowerBound(l.leafKeys, key)
+        match (List.nth(index, l.leafKeys)) {
+          Some(k) when Key.compare(k, key) == 0 =>
+            return Err("insert: duplicate key"),
+          _ => {
+            l.leafKeys = Node.insertAt(l.leafKeys, index, key)
+            l.leafRecs = Node.insertAt(l.leafRecs, index, r)
+            tree.size += 1
+            return Ok(void)
+          },
+        }
+      },
+      Node.Internal(i) => {
+        let ci = Node.childIndex(i.intKeys, key)
+        let child = match (List.nth(ci, i.children)) {
+          None => fail "insertHelper: child index out of bounds",
+          Some(c) => c,
+        }
+        if (Node.isFull(child, t)) {
+          match (child) {
+            Node.Leaf(l) => {
+              let (promotedKey, newNode) = BPNode.splitLeaf(l, t)
+              match (promotedKey) {
+                Ok(k) => {
+                  i.intKeys = BPNode.insertAt(i.intKeys, ci, k)
+                },
+                Err(e) => return Err(e),
+              }
+              i.children = BPNode.insertAt(i.children, ci + 1, newNode)
+            },
+            Node.Internal(ic) => {
+              let (promotedKey, newNode) = BPNode.splitInternal(ic, t)
+              i.intKeys = BPNode.insertAt(i.intKeys, ci, promotedKey)
+              i.children = BPNode.insertAt(i.children, ci + 1, newNode)
+            },
+          }
+          let newCi = BPNode.childIndex(i.intKeys, key)
+          return match (List.nth(newCi, i.children)) {
+            None => fail "insertHelper: child index out of bounds after split",
+            Some(c) => insertHelper(c),
+          }
+        } else {
+          return insertHelper(child)
+        }
+      },
+    }
+  }
+  return match (insertHelper(tree.root)) {
+    Ok(_) => Ok(void),
+    Err(e) => Err(e),
+  }
+}
+
+provide let bulkInsert = (entries: List<(key, value)>, tree) => {
+  // TODO: This can't use regular insert as that would be O(n log n) we need to build the tree from the bottom up
+  List.forEach(((key, value)) => ignore(insert(key, value, tree)), entries)
+}
+
+provide let fromList = (minDegree: Number, entries: List<(key, value)>) => {
+  let tree = make(minDegree)
+  bulkInsert(entries, tree)
+  tree
+}
+
+provide let delete = (key, tree) => {
+  let t = tree.minDegree
+
+  let requireSome = (opt, msg) => {
+    match (opt) {
+      Some(v) => Ok(v),
+      None => Err(msg),
+    }
+  }
+
+  let replaceKeyAt = (keys: List<Key.Key>, index: Number, value: Key.Key) => {
+    List.append(
+      List.sub(0, index, keys),
+      [value, ...List.drop(index + 1, keys)]
+    )
+  }
+
+  let removeKeyAt = (keys: List<Key.Key>, index: Number) => {
+    List.append(List.sub(0, index, keys), List.drop(index + 1, keys))
+  }
+
+  let removeChildAt = (children: List<BPNode.BPNode<a>>, index: Number) => {
+    List.append(List.sub(0, index, children), List.drop(index + 1, children))
+  }
+
+  let borrowFromLeft = (p: BPNode.InternalData<a>, ci: Number) => {
+    let leftSib = match (
+      requireSome(
+        List.nth(ci - 1, p.children),
+        "fixChild: left sibling missing"
+      )
+    ) {
+      Err(e) => return Err(e),
+      Ok(sib) => sib,
+    }
+    let child = match (
+      requireSome(
+        List.nth(ci, p.children),
+        "fixChild: child index out of bounds"
+      )
+    ) {
+      Err(e) => return Err(e),
+      Ok(c) => c,
+    }
+
+    return match ((leftSib, child)) {
+      (BPNode.Leaf(ls), BPNode.Leaf(c)) => {
+        let lsLen = List.length(ls.leafKeys)
+        let borrowedKey = match (
+          requireSome(
+            List.nth(lsLen - 1, ls.leafKeys),
+            "fixChild: left leaf empty"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        let borrowedRec = match (
+          requireSome(
+            List.nth(lsLen - 1, ls.leafRecs),
+            "fixChild: left leaf rec missing"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(r) => r,
+        }
+        c.leafKeys = BPNode.insertAt(c.leafKeys, 0, borrowedKey)
+        c.leafRecs = BPNode.insertAt(c.leafRecs, 0, borrowedRec)
+        ls.leafKeys = List.sub(0, lsLen - 1, ls.leafKeys)
+        ls.leafRecs = List.sub(0, lsLen - 1, ls.leafRecs)
+        let newSep = match (
+          requireSome(
+            List.nth(0, c.leafKeys),
+            "fixChild: child leaf empty after borrow"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        p.intKeys = replaceKeyAt(p.intKeys, ci - 1, newSep)
+        return Ok(void)
+      },
+      (BPNode.Internal(ls), BPNode.Internal(c)) => {
+        let lsKeyLen = List.length(ls.intKeys)
+        let parentKey = match (
+          requireSome(
+            List.nth(ci - 1, p.intKeys),
+            "fixChild: parent key missing"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        let rotatedKey = match (
+          requireSome(
+            List.nth(lsKeyLen - 1, ls.intKeys),
+            "fixChild: left internal has no last key"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        let rotatedChild = match (
+          requireSome(
+            List.nth(List.length(ls.children) - 1, ls.children),
+            "fixChild: left internal has no last child"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(ch) => ch,
+        }
+        c.intKeys = BPNode.insertAt(c.intKeys, 0, parentKey)
+        c.children = BPNode.insertAt(c.children, 0, rotatedChild)
+        ls.intKeys = List.sub(0, lsKeyLen - 1, ls.intKeys)
+        ls.children = List.sub(0, List.length(ls.children) - 1, ls.children)
+        p.intKeys = replaceKeyAt(p.intKeys, ci - 1, rotatedKey)
+        return Ok(void)
+      },
+      _ => return Ok(void),
+    }
+  }
+
+  let borrowFromRight = (p: BPNode.InternalData<a>, ci: Number) => {
+    let rightSib = match (
+      requireSome(
+        List.nth(ci + 1, p.children),
+        "fixChild: right sibling missing"
+      )
+    ) {
+      Err(e) => return Err(e),
+      Ok(sib) => sib,
+    }
+    let child = match (
+      requireSome(
+        List.nth(ci, p.children),
+        "fixChild: child index out of bounds"
+      )
+    ) {
+      Err(e) => return Err(e),
+      Ok(c) => c,
+    }
+
+    return match ((child, rightSib)) {
+      (BPNode.Leaf(c), BPNode.Leaf(rs)) => {
+        let borrowedKey = match (
+          requireSome(List.nth(0, rs.leafKeys), "fixChild: right leaf empty")
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        let borrowedRec = match (
+          requireSome(
+            List.nth(0, rs.leafRecs),
+            "fixChild: right leaf rec missing"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(r) => r,
+        }
+        c.leafKeys = List.append(c.leafKeys, [borrowedKey])
+        c.leafRecs = List.append(c.leafRecs, [borrowedRec])
+        rs.leafKeys = List.drop(1, rs.leafKeys)
+        rs.leafRecs = List.drop(1, rs.leafRecs)
+        let newSep = match (
+          requireSome(
+            List.nth(0, rs.leafKeys),
+            "fixChild: right leaf empty after borrow"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        p.intKeys = replaceKeyAt(p.intKeys, ci, newSep)
+        return Ok(void)
+      },
+      (BPNode.Internal(c), BPNode.Internal(rs)) => {
+        let parentKey = match (
+          requireSome(List.nth(ci, p.intKeys), "fixChild: parent key missing")
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        let rotatedKey = match (
+          requireSome(List.nth(0, rs.intKeys), "fixChild: right internal empty")
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        let rotatedChild = match (
+          requireSome(
+            List.nth(0, rs.children),
+            "fixChild: right internal has no first child"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(ch) => ch,
+        }
+        c.intKeys = List.append(c.intKeys, [parentKey])
+        c.children = List.append(c.children, [rotatedChild])
+        rs.intKeys = List.drop(1, rs.intKeys)
+        rs.children = List.drop(1, rs.children)
+        p.intKeys = replaceKeyAt(p.intKeys, ci, rotatedKey)
+        return Ok(void)
+      },
+      _ => return Ok(void),
+    }
+  }
+
+  let mergeChildren = (
+    p: BPNode.InternalData<a>,
+    leftindex: Number,
+    rightindex: Number,
+  ) => {
+    let leftChild = match (
+      requireSome(
+        List.nth(leftindex, p.children),
+        "fixChild: left merge child missing"
+      )
+    ) {
+      Err(e) => return Err(e),
+      Ok(c) => c,
+    }
+    let rightChild = match (
+      requireSome(
+        List.nth(rightindex, p.children),
+        "fixChild: right merge child missing"
+      )
+    ) {
+      Err(e) => return Err(e),
+      Ok(c) => c,
+    }
+
+    let mergeResult = match ((leftChild, rightChild)) {
+      (BPNode.Leaf(lc), BPNode.Leaf(rc)) => {
+        lc.leafKeys = List.append(lc.leafKeys, rc.leafKeys)
+        lc.leafRecs = List.append(lc.leafRecs, rc.leafRecs)
+        lc.nextLeaf = rc.nextLeaf
+        Ok(void)
+      },
+      (BPNode.Internal(lc), BPNode.Internal(rc)) => {
+        let sepKey = match (
+          requireSome(
+            List.nth(leftindex, p.intKeys),
+            "fixChild: separator key missing"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(k) => k,
+        }
+        lc.intKeys = List.append(lc.intKeys, [sepKey, ...rc.intKeys])
+        lc.children = List.append(lc.children, rc.children)
+        Ok(void)
+      },
+      _ => Ok(void),
+    }
+
+    match (mergeResult) {
+      Err(e) => return Err(e),
+      Ok(_) => {
+        p.intKeys = removeKeyAt(p.intKeys, leftindex)
+        p.children = removeChildAt(p.children, rightindex)
+        return Ok(void)
+      },
+    }
+  }
+
+  let fixChild = (parent: BPNode.BPNode<a>, ci: Number) => {
+    return match (parent) {
+      BPNode.Internal(p) => {
+        let numChildren = List.length(p.children)
+        let minKeys = t - 1
+        let leftCanLend = if (ci > 0) {
+          let leftSib = match (
+            requireSome(
+              List.nth(ci - 1, p.children),
+              "fixChild: left sibling missing"
+            )
+          ) {
+            Err(e) => return Err(e),
+            Ok(sib) => sib,
+          }
+          BPNode.nodeKeyCount(leftSib) > minKeys
+        } else {
+          false
+        }
+
+        if (leftCanLend) {
+          return borrowFromLeft(p, ci)
+        }
+
+        let rightCanLend = if (ci < numChildren - 1) {
+          let rightSib = match (
+            requireSome(
+              List.nth(ci + 1, p.children),
+              "fixChild: right sibling missing"
+            )
+          ) {
+            Err(e) => return Err(e),
+            Ok(sib) => sib,
+          }
+          BPNode.nodeKeyCount(rightSib) > minKeys
+        } else {
+          false
+        }
+
+        if (rightCanLend) {
+          return borrowFromRight(p, ci)
+        }
+
+        let (leftindex, rightindex) = if (ci < numChildren - 1)
+          (ci, ci + 1)
+        else
+          (ci - 1, ci)
+        match (mergeChildren(p, leftindex, rightindex)) {
+          Err(e) => return Err(e),
+          Ok(_) => void,
+        }
+
+        if (List.length(p.intKeys) == 0) {
+          let newRoot = match (
+            requireSome(
+              List.nth(0, p.children),
+              "fixChild: merged root has no children"
+            )
+          ) {
+            Err(e) => return Err(e),
+            Ok(r) => r,
+          }
+          tree.root = newRoot
+        }
+        return Ok(void)
+      },
+      _ => return Ok(void),
+    }
+  }
+
+  let removeFromLeaf = (l: BPNode.LeafData<a>, index: Number) => {
+    l.leafKeys = List.append(
+      List.sub(0, index, l.leafKeys),
+      List.drop(index + 1, l.leafKeys)
+    )
+    l.leafRecs = List.append(
+      List.sub(0, index, l.leafRecs),
+      List.drop(index + 1, l.leafRecs)
+    )
+    tree.size -= 1
+  }
+
+  let rec deleteFrom = current => {
+    return match (current) {
+      BPNode.Leaf(l) => {
+        let index = BPNode.lowerBound(l.leafKeys, key)
+        return match (List.nth(index, l.leafKeys)) {
+          Some(k) when Key.compare(k, key) == 0 => {
+            removeFromLeaf(l, index)
+            return Ok(true)
+          },
+          _ => return Ok(false),
+        }
+      },
+      BPNode.Internal(n) => {
+        let ci = BPNode.childIndex(n.intKeys, key)
+        let child = match (
+          requireSome(
+            List.nth(ci, n.children),
+            "delete: child index out of bounds"
+          )
+        ) {
+          Err(e) => return Err(e),
+          Ok(c) => c,
+        }
+        if (BPNode.nodeKeyCount(child) <= t - 1) {
+          match (fixChild(current, ci)) {
+            Err(e) => return Err(e),
+            Ok(_) => void,
+          }
+          let newCi = BPNode.childIndex(n.intKeys, key)
+          let newChild = match (
+            requireSome(
+              List.nth(newCi, n.children),
+              "delete: child missing after fix"
+            )
+          ) {
+            Err(e) => return Err(e),
+            Ok(c) => c,
+          }
+          return deleteFrom(newChild)
+        }
+        return deleteFrom(child)
+      },
+    }
+  }
+
+  deleteFrom(tree.root)
+}
+
+provide let range = (tree: BPlusTree<a>, start: Key.Key, end: Key.Key) => {
+  use Key.{ (<) as keyLt }
+  let rec collectLeaf = (l: BPNode.LeafData<a>, i: Number, acc: List<Entry<a>>) => {
+    if (i >= List.length(l.leafKeys)) {
+      match (l.nextLeaf) {
+        None => acc,
+        Some(data) =>
+          collectLeaf(data, BPNode.lowerBound(data.leafKeys, start), acc),
+      }
+    } else {
+      match (List.nth(i, l.leafKeys)) {
+        None => acc,
+        Some(k) when !keyLt(k, end) => acc,
+        Some(_) => {
+          match (List.nth(i, l.leafRecs)) {
+            None => fail "range: key/record lists out of sync",
+            Some(r) => collectLeaf(l, i + 1, List.append(acc, [r])),
+          }
+        },
+      }
+    }
+  }
+  let startLeaf = findLeaf(tree, start)
+  match (startLeaf) {
+    Ok(BPNode.Leaf(l)) =>
+      collectLeaf(l, BPNode.lowerBound(l.leafKeys, start), []),
+    _ => fail "range: start node is not a leaf",
+  }
+}
+
+let rec collectLeafChain = (l: BPNode.LeafData<a>, acc: List<Entry<a>>) => {
+  let newAcc = List.append(acc, l.leafRecs)
+  match (l.nextLeaf) {
+    None => newAcc,
+    Some(data) => collectLeafChain(data, newAcc),
+  }
+}
+let rec collectAll = (tree: BPlusTree<a>) => {
+  let rec collectAllFrom = (node: BPNode.BPNode<a>, acc: List<Entry<a>>) => {
+    match (node) {
+      BPNode.Internal({ children, _ }) => match (List.nth(0, children)) {
+        None => fail "internal node has no children",
+        Some(child) => collectAllFrom(child, acc),
+      },
+      BPNode.Leaf(l) => collectLeafChain(l, acc),
+    }
+  }
+
+  collectAllFrom(tree.root, [])
+}
+
+let rec checkNoDuplicates = (records: List<Entry<a>>) => {
+  match (records) {
+    [a, b, ...rest] => {
+      let (keyA, _) = a
+      let (keyB, _) = b
+      if (Key.compare(keyA, keyB) == 0) {
+        Err(keyA)
+      } else {
+        checkNoDuplicates([b, ...rest])
+      }
+    },
+    _ => Ok(void),
+  }
+}
+
+provide let merge = (tree: BPlusTree<a>, other: BPlusTree<a>) => {
+  let recsA = collectAll(tree)
+  let recsB = collectAll(other)
+  let combined = List.append(recsA, recsB)
+  let sorted = List.sort(
+    compare=((key1, _), (key2, _)) => Key.compare(key1, key2),
+    combined
+  )
+  match (checkNoDuplicates(sorted)) {
+    Ok(_) => {
+      tree.root = BPNode.Leaf({ leafKeys: [], leafRecs: [], nextLeaf: None })
+      tree.size = 0
+      List.forEach(r => ignore(insert(tree, r)), sorted)
+      Ok(void)
+    },
+    Err(dupKey) => Err("merge: duplicate key "),
+  }
+}
+
+provide let printTree = (tree: BPlusTree<a>) => {
+  let joinKeys = (keys: List<Key.Key>) =>
+    List.reduce(
+      (acc, k) =>
+        if (acc == "") Key.toString(k) else acc ++ ", " ++ Key.toString(k),
+      "",
+      keys
+    )
+  let formatNode = (node: BPNode.BPNode<a>) => {
+    match (node) {
+      Leaf({ leafKeys, leafRecs, _ }) => {
+        let recStr = List.reduce(
+          (acc, r) => if (acc == "") toString(r) else acc ++ ", " ++ toString(r),
+          "",
+          leafRecs
+        )
+        "Leaf " ++ joinKeys(leafKeys) ++ " -> " ++ recStr
+      },
+      Internal({ intKeys, _ }) => "Internal " ++ joinKeys(intKeys),
+    }
+  }
+
+  let rec printSubtree = (
+    node: BPNode.BPNode<a>,
+    prefix: String,
+    isLastSibling: Bool,
+    isRoot: Bool,
+  ) => {
+    let label = formatNode(node)
+    if (isRoot) {
+      print(label)
+    } else {
+      let branch = if (isLastSibling) "└── " else "├── "
+      print(prefix ++ branch ++ label)
+    }
+    let childPrefix = if (isRoot)
+      ""
+    else
+      prefix ++ (if (isLastSibling) "    " else "│   ")
+    match (node) {
+      Internal({ children, intKeys: _ }) => {
+        let n = List.length(children)
+        let rec walk = (i: Number) => {
+          if (i < n) {
+            let last = i == n - 1
+            match (List.nth(i, children)) {
+              None => void,
+              Some(c) => {
+                printSubtree(c, childPrefix, last, false)
+                walk(i + 1)
+              },
+            }
+          } else {
+            void
+          }
+        }
+        walk(0)
+      },
+      Leaf(_) => void,
+    }
+  }
+
+  printSubtree(tree.root, "", false, true)
+}
