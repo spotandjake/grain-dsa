@@ -1,0 +1,80 @@
+module IntervalTreeTest
+
+from "./intervalTree.gr" include IntervalTree
+
+// NOTE: We use `IntervalTree.toString` to visualize the tree structure in these tests. As such we are implicitly testing `IntervalTree.toString` in all of these tests. If `IntervalTree.toString` is broken, these tests may not be reliable.
+
+// IntervalTree.make: Smoke test
+assert IntervalTree.make(10uL) == IntervalTree.make(10uL)
+let tree = IntervalTree.make(10uL)
+assert IntervalTree.toString(tree) == "Empty Tree\n"
+// IntervalTree.add
+let tree = IntervalTree.make(10uL)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+assert IntervalTree.toString(tree) == "(1, 5) 5\n"
+IntervalTree.add({ rangeStart: 1, rangeEnd: 3 }, tree)
+assert IntervalTree.toString(tree) == "(1, 5) 5\n         (1, 3) 3\n"
+IntervalTree.add({ rangeStart: 4, rangeEnd: 6 }, tree)
+assert IntervalTree.toString(tree)
+  == "(4, 6) 6\n         (1, 5) 5\n                  (1, 3) 3\n"
+IntervalTree.add({ rangeStart: 7, rangeEnd: 9 }, tree)
+assert IntervalTree.toString(tree)
+  == "         (7, 9) 9\n(4, 6) 9\n         (1, 5) 5\n                  (1, 3) 3\n"
+// IntervalTree.isEmpty
+let tree = IntervalTree.make(10uL)
+assert IntervalTree.isEmpty(tree)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+assert !IntervalTree.isEmpty(tree)
+// IntervalTree.reset
+let tree = IntervalTree.make(10uL)
+assert IntervalTree.isEmpty(tree)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+assert !IntervalTree.isEmpty(tree)
+IntervalTree.reset(tree)
+assert IntervalTree.isEmpty(tree)
+// IntervalTree.size
+let tree = IntervalTree.make(10uL)
+assert IntervalTree.size(tree) == 0
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+assert IntervalTree.size(tree) == 1
+IntervalTree.add({ rangeStart: 1, rangeEnd: 3 }, tree)
+assert IntervalTree.size(tree) == 2
+IntervalTree.add({ rangeStart: 4, rangeEnd: 6 }, tree)
+assert IntervalTree.size(tree) == 3
+IntervalTree.add({ rangeStart: 7, rangeEnd: 9 }, tree)
+assert IntervalTree.size(tree) == 4
+// IntervalTree.remove
+let tree = IntervalTree.make(10uL)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 3 }, tree)
+IntervalTree.add({ rangeStart: 4, rangeEnd: 6 }, tree)
+assert IntervalTree.toString(tree)
+  == "(4, 6) 6\n         (1, 5) 5\n                  (1, 3) 3\n"
+assert IntervalTree.size(tree) == 3
+IntervalTree.remove({ rangeStart: 1, rangeEnd: 5 }, tree)
+assert IntervalTree.size(tree) == 2
+assert IntervalTree.toString(tree) == "(4, 6) 6\n         (1, 3) 3\n"
+// IntervalTree.contains
+let tree = IntervalTree.make(10uL)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 3 }, tree)
+IntervalTree.add({ rangeStart: 4, rangeEnd: 6 }, tree)
+assert IntervalTree.contains({ rangeStart: 1, rangeEnd: 5 }, tree)
+assert IntervalTree.contains({ rangeStart: 1, rangeEnd: 3 }, tree)
+assert IntervalTree.contains({ rangeStart: 4, rangeEnd: 6 }, tree)
+assert !IntervalTree.contains({ rangeStart: 2, rangeEnd: 4 }, tree)
+assert !IntervalTree.contains({ rangeStart: 0, rangeEnd: 2 }, tree)
+assert !IntervalTree.contains({ rangeStart: 5, rangeEnd: 7 }, tree)
+assert !IntervalTree.contains({ rangeStart: 6, rangeEnd: 8 }, tree)
+// IntervalTree.overlap
+let tree = IntervalTree.make(10uL)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 5 }, tree)
+IntervalTree.add({ rangeStart: 1, rangeEnd: 3 }, tree)
+IntervalTree.add({ rangeStart: 4, rangeEnd: 6 }, tree)
+assert IntervalTree.overlap({ rangeStart: 2, rangeEnd: 4 }, tree)
+  == Some({ rangeStart: 4, rangeEnd: 6 })
+assert IntervalTree.overlap({ rangeStart: 0, rangeEnd: 2 }, tree)
+  == Some({ rangeStart: 1, rangeEnd: 5 })
+assert IntervalTree.overlap({ rangeStart: 5, rangeEnd: 7 }, tree)
+  == Some({ rangeStart: 4, rangeEnd: 6 })
+assert IntervalTree.overlap({ rangeStart: 7, rangeEnd: 8 }, tree) == None

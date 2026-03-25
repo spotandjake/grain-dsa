@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  test:
+    desc: Tests the interval tree impl
+    cmds:
+      - grain ./intervalTree.test.gr
+  format:
+    desc: Formats the interval tree impl
+    cmds:
+      - grain format ./intervalTree.gr -o ./intervalTree.gr
+      - grain format ./intervalTree.test.gr -o ./intervalTree.test.gr
+  doc:
+    desc: Generates graindoc for the interval tree impl
+    cmds:
+      - grain doc ./intervalTree.gr -o ./intervalTree.md
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - rm -rf *.wasm
+      - rm -rf *.gro
+      - rm -rf ./intervalTree.md

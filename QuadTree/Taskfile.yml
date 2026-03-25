@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  test:
+    desc: Tests the quad tree impl
+    cmds:
+      - grain ./regionQuadTree.test.gr
+  format:
+    desc: Formats the quad tree impl
+    cmds:
+      - grain format ./regionQuadTree.gr -o ./regionQuadTree.gr
+      - grain format ./regionQuadTree.test.gr -o ./regionQuadTree.test.gr
+  doc:
+    desc: Generates graindoc for the quad tree impl
+    cmds:
+      - grain doc ./regionQuadTree.gr -o ./regionQuadTree.md
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - rm -rf *.wasm
+      - rm -rf *.gro
+      - rm -rf ./regionQuadTree.md

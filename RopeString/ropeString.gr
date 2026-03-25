@@ -1,0 +1,255 @@
+module RopeString
+
+from "list" include List
+from "string" include String
+from "char" include Char
+from "number" include Number
+from "exception" include Exception
+
+exception Exception(String)
+
+provide enum rec Rope {
+  Leaf(String),
+  Node(Rope, Rope),
+}
+
+let _MAX_LEAF_SIZE = 10
+
+let isEmpty = (rope: Rope) => {
+  match (rope) {
+    Leaf(s) => String.isEmpty(s),
+    Node(_, _) => false,
+  }
+}
+
+let isLeaf = (rope: Rope) => {
+  match (rope) {
+    Leaf(_) => true,
+    Node(_, _) => false,
+  }
+}
+
+provide let rec length = (rope: Rope) => {
+  match (rope) {
+    Leaf(s) => String.length(s),
+    Node(l, r) => length(l) + length(r),
+  }
+}
+
+let rec buildBalancedTree = (leaves: List<Rope>, start: Number, end: Number) => {
+  if (start > end) return Leaf("")
+  if (start == end) {
+    return match (List.nth(start, leaves)) {
+      Some(r) => r,
+      None => Leaf(""),
+    }
+  }
+  let mid = Number.floor((start + end) / 2)
+  return Node(
+    buildBalancedTree(leaves, start, mid),
+    buildBalancedTree(leaves, mid + 1, end),
+  )
+}
+
+provide let make = (str: String) => {
+  if (String.isEmpty(str)) return Leaf("")
+  let mut leaves = []
+  let mut i = 0
+  while (i < String.length(str)) {
+    let length = Number.min(_MAX_LEAF_SIZE, String.length(str) - i)
+    let substr = String.slice(i, end=i + length, str)
+    leaves = [Leaf(substr), ...leaves]
+    i += _MAX_LEAF_SIZE
+  }
+  return buildBalancedTree(List.reverse(leaves), 0, List.length(leaves) - 1)
+}
+
+let rec concat = (left: Rope, right: Rope) => {
+  match ((left, right)) {
+    (Leaf(s), _) when String.isEmpty(s) => right,
+    (_, Leaf(s)) when String.isEmpty(s) => left,
+    (l, r) => Node(l, r),
+  }
+}
+
+let rec split = (rope: Rope, i: Number) => {
+  if (i <= 0) return (Leaf(""), rope)
+  if (i >= length(rope)) return (rope, Leaf(""))
+  match (rope) {
+    Leaf(s) => {
+      if (i >= String.length(s)) return (rope, Leaf(""))
+      if (i == 0) return (Leaf(""), rope)
+      return (make(String.slice(0, end=i, s)), make(String.slice(i, s)))
+    },
+    Node(l, r) => {
+      let leftLen = length(l)
+      if (i <= leftLen) {
+        let (ll, lr) = split(l, i)
+        return (ll, concat(lr, r))
+      } else {
+        let (rl, rr) = split(r, i - leftLen)
+        return (concat(l, rl), rr)
+      }
+    },
+  }
+}
+
+provide let insert = (rope: Rope, str: String, i: Number) => {
+  if (i < 0 || i > length(rope)) {
+    throw Exception("Invalid insert position")
+  }
+  if (String.isEmpty(str)) return rope
+
+  let (left, right) = split(rope, i)
+
+  let middle = make(str)
+  return concat(concat(left, middle), right)
+}
+
+provide let delete = (rope: Rope, start: Number, end: Number) => {
+  if (start < 0 || end >= length(rope) || start > end) {
+    throw Exception("Invalid index range")
+  }
+  let (left, temp) = split(rope, start)
+  let (middle, right) = split(temp, end - start + 1)
+  return concat(left, right)
+}
+
+provide let rec substring = (rope: Rope, start: Number, end: Number) => {
+  if (start < 0 || end >= length(rope) || start > end) {
+    throw Exception("Invalid index range")
+  }
+  match (rope) {
+    Leaf(s) => {
+      String.slice(start, end=end + 1, s)
+    },
+    Node(left, right) => {
+      let leftLen = length(left)
+      if (end < leftLen) {
+        substring(left, start, end)
+      } else if (start >= leftLen) {
+        substring(right, start - leftLen, end - leftLen)
+      } else {
+        let leftPart = substring(left, start, leftLen - 1)
+        let rightPart = substring(right, 0, end - leftLen)
+        String.concat(leftPart, rightPart)
+      }
+    },
+  }
+}
+
+provide let find = (rope: Rope, substr: String) => {
+  let ropeLen = length(rope)
+  let subLen = String.length(substr)
+
+  if (subLen == 0) return 0
+  if (subLen > ropeLen) return -1
+
+  let mut i = 0
+  let mut result = -1
+
+  while (i <= ropeLen - subLen) {
+    let currentSlice = substring(rope, i, i + subLen - 1)
+    if (currentSlice == substr) {
+      result = i
+      break
+    }
+    i += 1
+  }
+  return i
+}
+
+provide let rec charAt = (rope: Rope, i: Number) => {
+  if (i < 0 || i >= length(rope)) {
+    throw Exception("Index out of range")
+  }
+  match (rope) {
+    Leaf(s) => {
+      String.charAt(i, s)
+    },
+    Node(left, right) => {
+      let leftLen = length(left)
+      if (i < leftLen) {
+        charAt(left, i)
+      } else {
+        charAt(right, i - leftLen)
+      }
+    },
+  }
+}
+
+let rec indexOfHelper = (rope: Rope, char: Char, offset: Number) => {
+  match (rope) {
+    Leaf(l) => {
+      let index = String.indexOf(Char.toString(char), l)
+      match (index) {
+        Some(i) => {
+          return offset + i
+        },
+        None => {
+          return -1
+        },
+      }
+    },
+    Node(left, right) => {
+      let leftResult = indexOfHelper(left, char, offset)
+      if (leftResult != -1) {
+        return leftResult
+      }
+
+      let leftLen = length(left)
+      return indexOfHelper(right, char, offset + leftLen)
+    },
+  }
+}
+
+provide let indexOf = (rope: Rope, char: Char) => {
+  indexOfHelper(rope, char, 0)
+}
+
+provide let rec reverse = (rope: Rope) => {
+  return match (rope) {
+    Leaf(l) => {
+      Leaf(String.reverse(l))
+    },
+    Node(left, right) => {
+      Node(reverse(right), reverse(left))
+    },
+  }
+}
+
+provide let rec toString = (rope: Rope) => {
+  match (rope) {
+    Leaf(s) => s,
+    Node(l, r) => toString(l) ++ toString(r),
+  }
+}
+
+let rec printHelper = (rope: Rope, prefix: String, isLast: Bool) => {
+  // Determine the symbol for the current branch
+  let connector = if (isLast) "└── " else "├── "
+
+  match (rope) {
+    Leaf(s) => {
+      print(prefix ++ connector ++ "Leaf(\"" ++ s ++ "\")")
+    },
+    Node(left, right) => {
+      print(prefix ++ connector ++ "Node")
+
+      let newPrefix = prefix ++ (if (isLast) "    " else "│   ")
+
+      printHelper(left, newPrefix, false)
+      printHelper(right, newPrefix, true)
+    },
+  }
+}
+
+provide let print = (rope: Rope) => {
+  match (rope) {
+    Leaf(s) => print("└── Leaf(\"" ++ s ++ "\")"),
+    Node(left, right) => {
+      printHelper(left, "", false)
+      printHelper(right, "", true)
+    },
+  }
+}

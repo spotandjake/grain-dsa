@@ -1,0 +1,202 @@
+module Trie
+
+from "string" include String
+from "char" include Char
+from "array" include Array
+
+/*
+* A basic node of a trinary trie
+*/
+module Node {
+  provide record rec Node<a> {
+    key: Char,
+    value: Option<a>,
+    mut low: Option<Node<a>>,
+    mut medium: Option<Node<a>>,
+    mut high: Option<Node<a>>,
+  }
+  provide let make = (key, value) => {
+    { key, value, low: None, medium: None, high: None }
+  }
+}
+
+abstract record Trie<a> {
+  mut root: Option<Node.Node<a>>,
+  mut size: Number,
+}
+
+provide let make = () => { root: None, size: 0 }
+
+provide let insert = (key, value, self) => {
+  let rec insertHelp = (key, keyIndex, value, node) => {
+    let currentChar = key[keyIndex]
+    use Char.{ (<), (>) }
+    let node: Node.Node<a> = match (node) {
+      None => Node.make(currentChar, None),
+      Some(node: Node.Node<a>) => node,
+    }
+    if (currentChar < node.key) {
+      let (low, success) = insertHelp(key, keyIndex, value, node.low)
+      ({ ...node, low: Some(low) }, success)
+    } else if (currentChar > node.key) {
+      let (high, success) = insertHelp(key, keyIndex, value, node.high)
+      ({ ...node, high: Some(high) }, success)
+    } else if (keyIndex + 1 == Array.length(key)) {
+      match (node.value) {
+        Some(_) => (node, false),
+        None => ({ ...node, value: Some(value) }, true),
+      }
+    } else {
+      let (medium, success) = insertHelp(key, keyIndex + 1, value, node.medium)
+      ({ ...node, medium: Some(medium) }, success)
+    }
+  }
+  let (node, success) = insertHelp(String.explode(key), 0, value, self.root)
+  self.root = Some(node)
+  if (success) self.size += 1
+  success
+}
+
+provide let remove = (key, self) => {
+  let rec removeHelp = (key, keyIndex, node) => {
+    let currentChar = key[keyIndex]
+    use Char.{ (<), (>) }
+    let (node, success) = match (node) {
+      None => (node, false),
+      Some(node: Node.Node<a>) => {
+        if (currentChar < node.key) {
+          let (low, success) = removeHelp(key, keyIndex, node.low)
+          (Some({ ...node, low }), success)
+        } else if (currentChar > node.key) {
+          let (high, success) = removeHelp(key, keyIndex, node.high)
+          (Some({ ...node, high }), success)
+        } else if (keyIndex + 1 == Array.length(key)) {
+          match (node.value) {
+            Some(_) => (None, true),
+            None => (Some(node), false),
+          }
+        } else {
+          let (medium, success) = removeHelp(key, keyIndex + 1, node.medium)
+          (Some({ ...node, medium }), success)
+        }
+      },
+    }
+    let node = match (node: Option<Node.Node<a>>) {
+      None => None,
+      Some({ value: None, low: None, medium: None, high: None, _ }) => None,
+      Some({ medium: None, high: Some(_) as high, _ } as node) =>
+        Some({ ...node, medium: high, high: None }),
+      Some({ low: Some(_) as low, medium: None, high: None, _ } as node) =>
+        Some({ ...node, medium: low, low: None }),
+      Some(node) => Some(node),
+    }
+    (node, success)
+  }
+  let (node, success) = removeHelp(String.explode(key), 0, self.root)
+  self.root = node
+  if (success) self.size += 1
+  success
+}
+
+provide let printKeyValues = self => {
+  let rec printKeyValuesHelper = (node, key) => {
+    match (node) {
+      None => void,
+      Some(node: Node.Node<a>) => {
+        printKeyValuesHelper(node.low, key)
+        match (node.value) {
+          Some(value) => {
+            print(key ++ toString(node.key) ++ " " ++ toString(value))
+          },
+          None => void,
+        }
+        printKeyValuesHelper(node.medium, key ++ toString(node.key))
+        printKeyValuesHelper(node.high, key)
+      },
+    }
+  }
+  printKeyValuesHelper(self.root, "")
+}
+
+provide let print = self => {
+  let rec printHelper = (offset, node) => {
+    match (node) {
+      None => print(""),
+      Some(node: Node.Node<a>) => {
+        print(node.key)
+        let offset = offset + 2
+        let indent = String.repeat(offset, " ")
+        print(indent ++ "H:", suffix="")
+        printHelper(offset, node.high)
+        print(indent ++ "M:", suffix="")
+        printHelper(offset, node.medium)
+        print(indent ++ "L:", suffix="")
+        printHelper(offset, node.low)
+      },
+    }
+  }
+  printHelper(0, self.root)
+}
+
+provide let contains = (key, self) => {
+  let rec containsHelp = (key, keyIndex, node) => {
+    let currentChar = key[keyIndex]
+    match (node) {
+      Some(node: Node.Node<a>) => {
+        use Char.{ (<), (>) }
+        if (currentChar < node.key) {
+          containsHelp(key, keyIndex, node.low)
+        } else if (currentChar > node.key) {
+          containsHelp(key, keyIndex, node.high)
+        } else if (keyIndex == Array.length(key) - 1) {
+          match (node.value) {
+            Some(_) => true,
+            None => false,
+          }
+        } else {
+          containsHelp(key, keyIndex + 1, node.medium)
+        }
+      },
+      None => false,
+    }
+  }
+  containsHelp(String.explode(key), 0, self.root)
+}
+
+provide let getValue = (key, self) => {
+  let rec getValueHelp = (key, keyIndex, node) => {
+    let currentChar = key[keyIndex]
+    match (node) {
+      Some(node: Node.Node<a>) => {
+        use Char.{ (<), (>) }
+        if (currentChar < node.key) {
+          getValueHelp(key, keyIndex, node.low)
+        } else if (currentChar > node.key) {
+          getValueHelp(key, keyIndex, node.high)
+        } else if (keyIndex == Array.length(key) - 1) {
+          node.value
+        } else {
+          getValueHelp(key, keyIndex + 1, node.medium)
+        }
+      },
+      None => None,
+    }
+  }
+  getValueHelp(String.explode(key), 0, self.root)
+}
+
+// // bool insert (string key, T value)
+// // bool remove (string key)
+// // T Value (string key)
+// let trie = make()
+// insert("abba", 10, trie)
+// insert("ab", 20, trie)
+// insert("c", 30, trie)
+// insert("cbc", 30, trie)
+// remove("cbc", trie)
+
+// // print(trie)
+// Pervasives.print(contains("ab", trie))
+// Pervasives.print(getValue("abba", trie))
+
+// // printKeyValues(trie)

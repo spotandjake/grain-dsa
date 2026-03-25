@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  # test:
+  #   desc: Tests the rope string impl
+  #   cmds:
+  #     - grain ./ropeString.test.gr
+  format:
+    desc: Formats the rope string impl
+    cmds:
+      - grain format ./ropeString.gr -o ./ropeString.gr
+      # - grain format ./ropeString.test.gr -o ./ropeString.test.gr
+  doc:
+    desc: Generates graindoc for the rope string impl
+    cmds:
+      - grain doc ./ropeString.gr -o ./ropeString.md
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - rm -rf *.wasm
+      - rm -rf *.gro
+      - rm -rf ./ropeString.md

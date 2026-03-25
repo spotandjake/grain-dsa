@@ -1,15 +1,15 @@
 /**
  * An implementation of an augmented interval tree in Grain.
+ *
+ * This tree is augmented with a random priority used to help maintain balance and a maxHigh field
+ * used to optimize overlap queries.
  */
 module IntervalTree
 
 from "random" include Random
 from "uint32" include Uint32
-from "number" include Number
 
-// Types
-
-provide module Node {
+module Node {
   /** An interval node within the interval tree. */
   provide record rec Node<a> {
     /** The random generator used for assigning priorities */
@@ -26,11 +26,21 @@ provide module Node {
     right: Option<Node<a>>,
   }
 
-  provide let make = (period: Range<a>) => {
-    let random = Random.make(10uL)
+  /**
+   * Creates a new interval node with the given period and a random priority.
+   *
+   * Time Complexity: O(1)
+   *
+   * @param period: The interval to be stored in the node
+   * @param random: The random generator used to assign a priority to the node
+   *
+   * @returns A new interval node with the specified period and a random priority
+   */
+  provide let make = (period: Range<a>, random: Random.Random) => {
     {
       random,
       period,
+      // We generate a priority between 10 and 100, these numbers are somewhat random
       priority: Random.nextUint32InRange(random, 10ul, 100ul),
       maxHigh: period.rangeEnd,
       left: None,
@@ -58,13 +68,15 @@ provide module Node {
    * @param node: The node to rotate
    *
    * @returns The new root of the subtree after rotation
+   *
+   * @throws Failure(Message): If the given node has no right child, a left rotation cannot be performed and an error is thrown
    */
-  provide let rotateLeft = (node: Node<a>) => {
-    match (node) {
+  provide let rotateLeft = (root: Node<a>) => {
+    match (root) {
       { right: None, _ } =>
-        fail "Invalid rotation: Cannot rotate left on a node with no right child",
+        fail "Cannot perform left rotation on a node with no right child",
       { right: Some({ left: childLeft, _ } as childNode), _ } => {
-        { ...childNode, left: Some({ ...node, right: childLeft }) }
+        { ...childNode, left: Some({ ...root, right: childLeft }) }
       },
     }
   }
@@ -75,11 +87,13 @@ provide module Node {
    * @param node: The node to rotate
    *
    * @returns The new root of the subtree after rotation
+   *
+   * @throws Failure(Message): If the given node has no left child, a right rotation cannot be performed and an error is thrown
    */
   provide let rotateRight = (node: Node<a>) => {
     match (node) {
       { left: None, _ } =>
-        fail "Invalid rotation: Cannot rotate right on a node with no left child",
+        fail "Cannot perform right rotation on a node with no left child",
       { left: Some({ right: childRight, _ } as childNode), _ } => {
         { ...childNode, right: Some({ ...node, left: childRight }) }
       },
@@ -87,11 +101,11 @@ provide module Node {
   }
 
   /**
-   * Sets the the maxHigh interval to the maxHigh of the left and right children of the given nodes.
+   * Sets the maxHigh interval to the maxHigh of the left and right children of the given nodes.
    *
    * @param node: The node to calculate the maxHigh for
    *
-   * @return The node with the maxHigh field updated to the maximum of its own maxHigh and the maxHigh of its children
+   * @returns The node with the maxHigh field updated to the maximum of its own maxHigh and the maxHigh of its children
    */
   provide let calculateMax = (node: Node<a>) => {
     let leftMax = match (node.left) {
@@ -102,11 +116,15 @@ provide module Node {
       Some(rightNode) => rightNode.maxHigh,
       None => node.maxHigh,
     }
-    { ...node, maxHigh: Number.max(leftMax, rightMax) }
+    use Pervasives.{ compare }
+    let maxHigh = if (compare(leftMax, rightMax) > 0) leftMax else rightMax
+    { ...node, maxHigh }
   }
 }
 
-provide record rec Tree<a> {
+/** An augmented interval tree. */
+abstract record rec Tree<a> {
+  random: Random.Random,
   /** The root node of the interval tree. */
   mut root: Option<Node.Node<a>>,
 }
@@ -114,20 +132,18 @@ provide record rec Tree<a> {
 /**
  * Creates a new interval tree.
  *
+ * @param seed: The seed for the random generator used to assign priorities to nodes in the tree
+ *
  * @returns A new empty interval tree
  */
-provide let make = () => {
-  { root: None, }
-}
+provide let make = seed => { random: Random.make(seed), root: None }
 
 /**
  * Empties the given interval tree.
  *
  * @param self: The interval tree to be emptied
  */
-provide let makeEmpty = self => {
-  self.root = None
-}
+provide let reset = self => self.root = None
 
 /**
  * Checks if the given interval tree is empty
@@ -136,7 +152,7 @@ provide let makeEmpty = self => {
  *
  * @returns `true` if the tree is empty, `false` otherwise
  */
-provide let empty = self => {
+provide let isEmpty = self => {
   match (self.root) {
     Some(_) => false,
     None => true,
@@ -173,8 +189,9 @@ provide let size = self => {
  * @param period: The interval to be added
  * @param self: The interval tree to which the interval will be added
  */
-provide let add = (period: Range<a>, self) => {
-  let newNode = Node.make(period)
+provide let add = (period: Range<a>, self: Tree<a>) => {
+  // Create a new node for the given interval
+  let newNode = Node.make(period, self.random)
   let rec addHelp = (newNode: Node.Node<a>, node: Node.Node<a>) => {
     // Binary Search based on low field
     let cmp = Node.compare(newNode.period, node.period)
@@ -216,32 +233,33 @@ provide let add = (period: Range<a>, self) => {
     None => Some(newNode),
   }
 }
+
 /**
- * Removes a new interval to the tree.
+ * Removes a new interval from the tree.
  *
  * Time Complexity: O(log n)
  *
  * @param period: The interval to be removed
- * @param self: The interval tree to which the interval will be removed
+ * @param self: The interval tree of which the interval will be removed
  */
 provide let remove = (period: Range<a>, self) => {
   let rec removeHelp = (period: Range<a>, node: Node.Node<a>) => {
     // Binary Search based on low field
     let cmp = Node.compare(period, node.period)
-    let node = if (cmp > 0) {
+    let node = if (cmp < 0) {
       match (node.left) {
         Some(childNode) => { ...node, left: removeHelp(period, childNode) },
         None => node,
       }
-    } else if (cmp < 0) {
+    } else if (cmp > 0) {
       match (node.right) {
         Some(childNode) => { ...node, right: removeHelp(period, childNode) },
         None => node,
       }
     } else {
-      match (node) {
-        { left: Some(left), right: None, _ } => Node.rotateLeft(node),
-        { left: None, right: Some(right), _ } => Node.rotateRight(node),
+      let node = match (node) {
+        { left: Some(left), right: None, _ } => Node.rotateRight(node),
+        { left: None, right: Some(right), _ } => Node.rotateLeft(node),
         { left: Some(left), right: Some(right), _ } => {
           // Set the higher priority to the root
           use Uint32.{ (>) }
@@ -273,11 +291,12 @@ provide let remove = (period: Range<a>, self) => {
  * @param period: The interval to be checked for containment
  * @param self: The interval tree to be checked for containment
  *
- * @return `true` if the tree contains the given interval, `false` otherwise
+ * @returns `true` if the tree contains the given interval, `false` otherwise
  */
 provide let contains = (period: Range<a>, self) => {
   let rec containsHelp = (period: Range<a>, node: Node.Node<a>) => {
     let cmp = Node.compare(period, node.period)
+    // Binary Search based on low field
     if (cmp == 0) {
       true
     } else if (cmp > 0) {
@@ -303,29 +322,26 @@ provide let contains = (period: Range<a>, self) => {
  * @param period: The interval to be checked for overlap
  * @param self: The interval tree to be checked for overlap
  *
- * @returns An interval from the tree that overlaps with the given interval, or `(0, 0)` if no such interval exists
+ * @returns Some(interval) if there is an overlapping interval in the tree, None otherwise
  */
 provide let overlap = (period: Range<a>, self: Tree<a>) => {
-  let rec overlapsHelp = (period: Range<a>, node: Node.Node<a>) => {
-    // Check for overlap with the current node
-    if (
-      node.period.rangeStart > period.rangeEnd
-      || period.rangeStart > node.period.rangeEnd
-    ) {
-      return node.period
-    } else {
-      // Go left or right
-      return match (node) {
-        { left: Some(left), _ } when period.rangeStart <= left.maxHigh =>
-          overlapsHelp(period, left),
-        { right: Some(right), _ } => overlapsHelp(period, right),
-        _ => { rangeStart: 0, rangeEnd: 0 },
-      }
+  let mut curr = self.root
+  while (true) {
+    match (curr) {
+      // Overlap condition: Two intervals [a, b] and [c, d] overlap if a <= d and c <= b
+      Some(node) when node.period.rangeStart > period.rangeEnd
+        || period.rangeStart > node.period.rangeEnd => {
+        match (node.left) {
+          Some(left) when period.rangeStart <= left.maxHigh => curr = node.left,
+          _ => curr = node.right,
+        }
+      },
+      _ => break,
     }
   }
-  match (self.root) {
-    Some(node) => overlapsHelp(period, node),
-    None => { rangeStart: 0, rangeEnd: 0 },
+  match (curr) {
+    Some(node) => Some(node.period),
+    None => None,
   }
 }
 
@@ -334,25 +350,26 @@ provide let overlap = (period: Range<a>, self: Tree<a>) => {
  *
  * @param self: The tree to be printed
  */
-provide let print = self => {
-  let rec printHelp = (node: Option<Node.Node<a>>, indent: String) => {
+provide let toString = self => {
+  let rec toStringHelp = (node: Option<Node.Node<a>>, indent) => {
     match (node) {
       Some({ period, maxHigh, left, right, _ }) => {
-        printHelp(right, indent ++ "         ")
-        print(
-          indent
+        toStringHelp(right, indent ++ "         ")
+          ++ (
+            indent
             ++ "("
             ++ toString(period.rangeStart)
             ++ ", "
             ++ toString(period.rangeEnd)
             ++ ") "
             ++ toString(maxHigh)
-        )
-        printHelp(left, indent ++ "         ")
+            ++ "\n"
+          )
+          ++ toStringHelp(left, indent ++ "         ")
       },
-      None when indent == "" => print("Empty Tree"),
-      None => void,
+      None when indent == "" => "Empty Tree\n",
+      None => "",
     }
   }
-  printHelp(self.root, "")
+  toStringHelp(self.root, "")
 }

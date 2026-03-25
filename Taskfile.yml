@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+includes:
+  intervalTree:
+    taskfile: ./intervalTree/Taskfile.yml
+    dir: ./intervalTree
+  quadTree:
+    taskfile: ./QuadTree/Taskfile.yml
+    dir: ./QuadTree
+  ropeString:
+    taskfile: ./RopeString/Taskfile.yml
+    dir: ./RopeString
+  trie:
+    taskfile: ./Trie/Taskfile.yml
+    dir: ./Trie
+
+tasks:
+  default:
+    desc: By default we clean, format, document and test
+    cmds:
+      - task: clean
+      - task: format
+      - task: doc
+      - task: test
+  test:
+    desc: Tests the data structure impls
+    cmds:
+      - task: intervalTree:test
+      - task: quadTree:test
+      # - task: ropeString:test
+      # - task: trie:test
+  format:
+    desc: Formats the data structure impls
+    cmds:
+      - task: intervalTree:format
+      - task: quadTree:format
+      - task: ropeString:format
+      - task: trie:format
+  doc:
+    desc: Generates graindoc for the data structure impls
+    cmds:
+      - task: intervalTree:doc
+      - task: quadTree:doc
+      - task: ropeString:doc
+      - task: trie:doc
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - task: intervalTree:clean
+      - task: quadTree:clean
+      - task: ropeString:clean
+      - task: trie:clean
+  lint:
+    desc: Performs ci linting checks
+    cmds:
+      # Run the documentation
+      - task: doc
+      # TODO: Ensure that there are no changes to any *.md files
+      - git diff --exit-code --name-only -- '**/*.md'
+      # Run the formatter
+      - task: format
+      # TODO: Ensure that there are no changes to any *.gr files
+      - git diff --exit-code --name-only -- '**/*.gr'

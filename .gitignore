@@ -1,6 +1,8 @@
 # Grain
 *.gro
 *.wasm
+*.mashtree
+*.modsig
 
 # Nix
 .direnv/

@@ -1,0 +1,414 @@
+/**
+ * A generic region quad tree implemented in Grain.
+ *
+ * Wiki: https://en.wikipedia.org/wiki/Quadtree#Region_quadtree
+ */
+module RegionQuadTree
+
+from "array" include Array
+
+/**
+ * A region quad tree is a tree data structure in which each internal node has exactly four children.
+ *
+ * The tree is used to represent a 2D space by recursively subdividing it into four quadrants or
+ * regions. Until each region is uniform (i.e all the values in the region are the same).
+ * In the worse case, a region quad tree can have a depth of log(n) where n is the size of the
+ * region, this happens when the region is subdivided until we reach 1x1 regions.
+ * (Think of a checkerboard pattern)
+ */
+provide enum rec QuadTree<a> {
+  /** A leaf node, representing a uniform region. */
+  Leaf{
+    /** The size of the given region. */
+    size: Number,
+    /** The value of the given region. */
+    value: a,
+  },
+  /** An internal node, representing a non-uniform region. */
+  Node{
+    /** The size of the given region. */
+    size: Number,
+    /** The northwest quadrant of the region. */
+    northWest: QuadTree<a>,
+    /** The northeast quadrant of the region. */
+    northEast: QuadTree<a>,
+    /** The southeast quadrant of the region. */
+    southEast: QuadTree<a>,
+    /** The southwest quadrant of the region. */
+    southWest: QuadTree<a>,
+  },
+}
+
+// These are the internal helper functions used to implement the public API of the region quad tree.
+module Internal {
+  /**
+   * Determines if a given region of an image should be subdivided into smaller regions.
+   * If all the values in the region are the same then we can represent the entire region as a single leaf node.
+   *
+   * Time Complexity: O(n^2) where n is the size of the region.
+   *
+   * @param image: The 2D array of values representing the image.
+   * @param x: The x coordinate of the top left corner of the region.
+   * @param y: The y coordinate of the top left corner of the region.
+   * @param size: The size of the region (the region is a square of size x size).
+   *
+   * @returns `true` if the region should be subdivided, `false` if it can be represented as a single leaf node.
+   */
+  provide let shouldSubDivide = (
+    image: Array<Array<a>>,
+    x: Number,
+    y: Number,
+    size: Number,
+  ) => {
+    let base = image[x][y]
+    for (let mut i = x; i < x + size; i += 1) {
+      let row = image[i]
+      for (let mut j = y; j < y + size; j += 1) {
+        if (row[j] != base) return true
+      }
+    }
+    return false
+  }
+  /**
+   * Recursively constructs a region quad tree from a given 2D array of values.
+   *
+   * Time Complexity: O(n^2) where n is the size of the region (the region is a square of size x size).
+   *
+   * @param data: The 2D array of values representing the image.
+   * @param x: The x coordinate of the top left corner of the region.
+   * @param y: The y coordinate of the top left corner of the region.
+   * @param size: The size of the region (the region is a square of size
+   * @param compress: Weather or not to compress the tree. If `true` then we will not subdivide regions that are already uniform, even if they are larger than 1x1.
+   *
+   * @returns A region quad tree representing the given 2D array of values.
+   */
+  provide let rec make = (
+    data: Array<Array<a>>,
+    x: Number,
+    y: Number,
+    size: Number,
+    compress: Bool,
+  ) => {
+    if (!compress && size > 1 || shouldSubDivide(data, x, y, size)) {
+      let mid = size / 2
+      let northWest = make(data, x, y, mid, compress)
+      let northEast = make(data, x, y + mid, mid, compress)
+      let southEast = make(data, x + mid, y + mid, mid, compress)
+      let southWest = make(data, x + mid, y, mid, compress)
+      Node{ size, northWest, northEast, southEast, southWest }
+    } else {
+      Leaf{ size, value: data[x][y] }
+    }
+  }
+  /**
+   * Recursively sets the value at the given coordinates in the region quad tree.
+   *
+   * Time Complexity: O(log(n))
+   *
+   * @param x: The x coordinate of the value to set.
+   * @param y: The y coordinate of the value to set.
+   * @param size: The size of the region (the region is a square of size x size).
+   * @param value: The new value to set at the given coordinates.
+   * @param tree: The region quad tree to set the value in.
+   *
+   * @returns A new region quad tree with the value at the given coordinates set to the new value.
+   */
+  provide let rec setPixel = (x: Number, y: Number, value: a, tree: QuadTree<a>) => {
+    match (tree) {
+      // This case means we have found the pixel we want to set, or the pixel is already that value
+      Leaf{ size, value: val } when size == 1 || val == value =>
+        Leaf{ size, value },
+      // This case occurs when we are trying to set a value in a region that is currently represented by a single leaf node.
+      Leaf{ size, value: val } => {
+        // Split the region into four subdivided quadrants
+        let leaf = Leaf{ size: size / 2, value: val }
+        // Set the value on the new subdivided tree.
+        setPixel(
+          x,
+          y,
+          value,
+          Node{
+            size,
+            northWest: leaf,
+            northEast: leaf,
+            southEast: leaf,
+            southWest: leaf,
+          }
+        )
+      },
+      // This case occurs as we are traversing down the tree to find the pixel we want to set.
+      Node{ size, northWest, northEast, southEast, southWest } => {
+        let mid = size / 2
+        // We can use something equivalent to a 2D binary search here to determine which quadrant we need to set the value in.
+        if (x < mid) { // North
+          if (y < mid) {
+            Node{
+              size,
+              northWest: setPixel(x, y, value, northWest),
+              northEast,
+              southEast,
+              southWest,
+            }
+          } else {
+            Node{
+              size,
+              northWest,
+              // We modify the y coordinate here because we are now in the northeast quadrant which starts at y = mid
+              northEast: setPixel(x, y - mid, value, northEast),
+              southEast,
+              southWest,
+            }
+          }
+        } else { // South
+          if (y < mid) {
+            Node{
+              size,
+              northWest,
+              northEast,
+              southEast,
+              // We modify the x coordinate here because we are now in the southwest quadrant which starts at x = mid
+              southWest: setPixel(x - mid, y, value, southWest),
+            }
+          } else {
+            Node{
+              size,
+              northWest,
+              northEast,
+              // We modify both the x and y coordinates here because we are now in the southeast quadrant which starts at x = mid and y = mid
+              southEast: setPixel(x - mid, y - mid, value, southEast),
+              southWest,
+            }
+          }
+        }
+      },
+    }
+  }
+
+  /**
+   * Converts a region quad tree back into a 2D array of values.
+   *
+   * @param arr: The 2D array of values representing the image.
+   * @param x: The x coordinate of the top left corner of the region.
+   * @param y: The y coordinate of the top left corner of the region.
+   * @param tree: The region quad tree to convert.
+   */
+  provide let rec toMatrix = (
+    arr: Array<Array<Option<a>>>,
+    x: Number,
+    y: Number,
+    tree: QuadTree<a>,
+  ) => {
+    match (tree) {
+      // When we hit a leaf node, we fill in the values of the region represented by the leaf node with the value of the leaf node.
+      Leaf{ size, value } => {
+        for (let mut i = x; i < x + size; i += 1) {
+          let row = arr[i]
+          for (let mut j = y; j < y + size; j += 1) {
+            row[j] = Some(value)
+          }
+        }
+      },
+      // If we have a non-leaf node we fill in the values of the four quadrants by traversing down the tree.
+      Node{ size, northWest, northEast, southEast, southWest } as node => {
+        let mid = size / 2
+        toMatrix(arr, x, y, northWest)
+        toMatrix(arr, x, y + mid, northEast)
+        toMatrix(arr, x + mid, y + mid, southEast)
+        toMatrix(arr, x + mid, y, southWest)
+      },
+    }
+  }
+}
+
+/**
+ * Constructs a brand new region quad tree.
+ *
+ * @param matrix: The 2D array of values to build the tree from. Must be a square array.
+ * @param compress: Weather or not to compress the tree.
+ *
+ * @returns A new region quad tree.
+ *
+ * @throws Failure(Message): If the input matrix is not a square array.
+ */
+provide let make = (matrix: Array<Array<a>>, compress: Bool=true) => {
+  let size = Array.length(matrix)
+  if (size != Array.length(matrix[0])) {
+    fail "Image must be a square array"
+  }
+  Internal.make(matrix, 0, 0, size, compress)
+}
+
+/**
+ * Compresses a region quad tree by merging nodes that have the same value into a single leaf.
+ *
+ * @param tree: The region quad tree to compress.
+ *
+ * @returns A new region quad tree with the same values as the input tree, but with nodes merged where possible.
+ */
+provide let compress = (tree: QuadTree<a>) => {
+  match (tree) {
+    // If all the children are the same leaf, we can compress this node into a single leaf.
+    Node{
+      size,
+      northWest: Leaf{ value: a, _ },
+      northEast: Leaf{ value: b, _ },
+      southEast: Leaf{ value: c, _ },
+      southWest: Leaf{ value: d, _ },
+    } when a == b && b == c && c == d => Leaf{ size, value: a },
+    _ => tree,
+  }
+}
+
+/**
+ * Switches the value at the given coordinates in the region quad tree.
+ *
+ * @param x: The x coordinate of the value to switch
+ * @param y: The y coordinate of the value to switch
+ * @param value: The new value to set at the given coordinates
+ * @param tree: The region quad tree to switch the value in
+ *
+ * @returns A new region quad tree with the value at the given coordinates switched to the new value.
+ */
+provide let setPixel = (x: Number, y: Number, value: a, tree: QuadTree<a>) => {
+  Internal.setPixel(x, y, value, compress(tree))
+}
+
+/**
+ * Gets the value at the given coordinates in the region quad tree.
+ *
+ * @param x: The x coordinate of the value to get
+ * @param y: The y coordinate of the value to get
+ * @param tree: The region quad tree to get the value from
+ *
+ * @returns The value at the given coordinates in the region quad tree.
+ */
+provide let rec getPixel = (x: Number, y: Number, tree: QuadTree<a>) => {
+  match (tree) {
+    // We've found the quadrant that contains the pixel.
+    Leaf{ value, _ } => value,
+    // We are still traversing down the tree to find the pixel we want to get.
+    Node{ size, northWest, northEast, southEast, southWest } => {
+      let mid = size / 2
+      // We can use something equivalent to a 2D binary search here to determine which quadrant we need to get the value from.
+      if (x < mid) { // North
+        if (y < mid) {
+          getPixel(x, y, northWest)
+        } else {
+          // We modify the y coordinate here because we are now in the northeast quadrant which starts at y = mid
+          getPixel(x, y - mid, northEast)
+        }
+      } else { // South
+        if (y < mid) {
+          // We modify the x coordinate here because we are now in the southwest quadrant which starts at x = mid
+          getPixel(x - mid, y, southWest)
+        } else {
+          // We modify both the x and y coordinates here because we are now in the southeast quadrant which starts at x = mid and y = mid
+          getPixel(x - mid, y - mid, southEast)
+        }
+      }
+    },
+  }
+}
+
+/**
+ * Combines the two quad trees using the given function.
+ *
+ * @param tree1: The first region quad tree.
+ * @param tree2: The second region quad tree.
+ * @param f: The combining function to apply to the values of the two trees.
+ *
+ * @returns A new region quad tree that is the result of the two input trees.
+ *
+ * @throws Failure(Message): If the two input trees are of different sizes.
+ *
+ * @example apply(tree1, tree2, (a, b) => a | b) // This would be a union of two binary images represented as region quad trees.
+ */
+provide let rec apply = (tree1, tree2, f) => {
+  match ((tree1, tree2)) {
+    // If the trees are of different sizes, we cannot union them.
+    (Node{ size: a, _ }, Node{ size: b, _ }) when a != b =>
+      fail "Cannot union trees of different sizes",
+    // If both trees are leaves we can just apply the binary operator to their values and return a new leaf.
+    (Leaf{ size, value: a }, Leaf{ value: b, _ }) =>
+      Leaf{ size, value: f(a, b) },
+    // If we have a leaf node and a non-leaf node, we can apply the leaf node to each of the children of the non-leaf node.
+    (
+      Node{ size, northWest, northEast, southEast, southWest },
+      Leaf{ _ } as leaf,
+    ) =>
+      Node{
+        size,
+        northWest: apply(northWest, leaf, f),
+        northEast: apply(northEast, leaf, f),
+        southEast: apply(southEast, leaf, f),
+        southWest: apply(southWest, leaf, f),
+      },
+    // If we have a leaf node and a non-leaf node, we can apply the leaf node to each of the children of the non-leaf node.
+    (
+      Leaf{ _ } as leaf,
+      Node{ size, northWest, northEast, southEast, southWest },
+    ) =>
+      Node{
+        size,
+        northWest: apply(leaf, northWest, f),
+        northEast: apply(leaf, northEast, f),
+        southEast: apply(leaf, southEast, f),
+        southWest: apply(leaf, southWest, f),
+      },
+    // If we have two non-leaf nodes, we can apply the function to each of their corresponding children and then compress the result.
+    (
+      Node{
+        size,
+        northWest: nw1,
+        northEast: ne1,
+        southEast: se1,
+        southWest: sw1,
+      },
+      Node{
+        size: _,
+        northWest: nw2,
+        northEast: ne2,
+        southEast: se2,
+        southWest: sw2,
+      },
+    ) =>
+      // We compress on the way up the tree, as we may be able to merge nodes that have the same value after applying the function to them.
+      compress(
+        Node{
+          size,
+          northWest: apply(nw1, nw2, f),
+          northEast: apply(ne1, ne2, f),
+          southEast: apply(se1, se2, f),
+          southWest: apply(sw1, sw2, f),
+        }
+      ),
+  }
+}
+
+/**
+ * Converts a region quad tree back into a 2D array of values.
+ *
+ * @param tree: The region quad tree to convert.
+ *
+ * @returns A 2D array of values representing the same data as the input region quad tree.
+ */
+provide let toMatrix = (tree: QuadTree<a>) => {
+  match (tree) {
+    // If we have a leaf node we can just create a 2D array of the appropriate size filled with the value of the leaf node.
+    Leaf{ size, value } => {
+      Array.init(size, (_) => Array.init(size, (_) => value))
+    },
+    // If we have a non-leaf node we fill in the values of the four quadrants by traversing down the tree.
+    Node{ size, _ } as node => {
+      // Create a 2D Array of the appropriate size filled with None, we will fill in the values as we traverse the tree.
+      let data = Array.init(size, (_) => Array.init(size, (_) => None))
+      // We use a helper function to traverse the tree and fill in the values of the data array as we go.
+      Internal.toMatrix(data, 0, 0, node)
+      // Map over the data and remove all the `None`s
+      Array.map(row => Array.map(cell => match (cell) {
+        Some(value) => value,
+        None => fail "Impossible: All cells should be filled in here",
+      }, row), data)
+    },
+  }
+}

@@ -1,0 +1,111 @@
+// Tests for the regionQuadTree
+module RegionQuadTreeTest
+
+from "./regionQuadTree.gr" include RegionQuadTree
+
+// RegionQuadTree.make
+assert RegionQuadTree.make([> [> 0, 0], [> 0, 0]])
+  == RegionQuadTree.Leaf{ size: 2, value: 0 }
+assert RegionQuadTree.make([> [> 'a', 'a'], [> 'a', 'a']])
+  == RegionQuadTree.Leaf{ size: 2, value: 'a' }
+assert RegionQuadTree.make([> [> 0, 1], [> 1, 0]])
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 1 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 1 },
+  }
+assert RegionQuadTree.make([> [> 0, 1], [> 0, 0]])
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 1 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+  }
+assert RegionQuadTree.make([> [> 0, 0], [> 0, 0]], compress=false)
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+  }
+// RegionQuadTree.toMatrix
+assert RegionQuadTree.toMatrix(Leaf{ size: 2, value: 0 })
+  == [> [> 0, 0], [> 0, 0]]
+assert RegionQuadTree.toMatrix(
+  RegionQuadTree.make(
+    [>
+      [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+      [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+      [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+      [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+      [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+      [> 0ul, 0ul, 1ul, 1ul, 0ul, 0ul, 0ul, 0ul],
+      [> 0ul, 0ul, 1ul, 1ul, 0ul, 0ul, 0ul, 0ul],
+      [> 0ul, 0ul, 1ul, 1ul, 0ul, 0ul, 0ul, 0ul],
+    ]
+  )
+)
+  == [>
+    [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+    [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+    [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+    [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+    [> 0ul, 0ul, 1ul, 1ul, 1ul, 1ul, 1ul, 1ul],
+    [> 0ul, 0ul, 1ul, 1ul, 0ul, 0ul, 0ul, 0ul],
+    [> 0ul, 0ul, 1ul, 1ul, 0ul, 0ul, 0ul, 0ul],
+    [> 0ul, 0ul, 1ul, 1ul, 0ul, 0ul, 0ul, 0ul],
+  ]
+// RegionQuadTree.compress
+assert RegionQuadTree.compress(
+  RegionQuadTree.make([> [> 0, 0], [> 0, 0]], compress=false)
+)
+  == RegionQuadTree.Leaf{ size: 2, value: 0 }
+// RegionQuadTree.setPixel
+let tree = RegionQuadTree.make([> [> 0, 0], [> 0, 0]])
+assert RegionQuadTree.setPixel(0, 0, 1, tree)
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 1 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+  }
+assert RegionQuadTree.setPixel(0, 1, 1, tree)
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 1 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+  }
+assert RegionQuadTree.setPixel(1, 0, 1, tree)
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 1 },
+  }
+assert RegionQuadTree.setPixel(1, 1, 1, tree)
+  == RegionQuadTree.Node{
+    size: 2,
+    northWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    northEast: RegionQuadTree.Leaf{ size: 1, value: 0 },
+    southEast: RegionQuadTree.Leaf{ size: 1, value: 1 },
+    southWest: RegionQuadTree.Leaf{ size: 1, value: 0 },
+  }
+// RegionQuadTree.getPixel
+let tree = RegionQuadTree.make([> [> 1, 0], [> 0, 1]])
+assert RegionQuadTree.getPixel(0, 0, tree) == 1
+assert RegionQuadTree.getPixel(0, 1, tree) == 0
+assert RegionQuadTree.getPixel(1, 0, tree) == 0
+assert RegionQuadTree.getPixel(1, 1, tree) == 1
+// RegionQuadTree.apply
+let tree = RegionQuadTree.make([> [> 1, 0], [> 0, 1]])
+let tree2 = RegionQuadTree.make([> [> 0, 1], [> 1, 0]])
+assert RegionQuadTree.apply(tree, tree2, (|))
+  == RegionQuadTree.Leaf{ size: 2, value: 1 }

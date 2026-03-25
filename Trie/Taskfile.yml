@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  # test:
+  #   desc: Tests the trie impl
+  #   cmds:
+  #     - grain ./3Trie.test.gr
+  format:
+    desc: Formats the trie impl
+    cmds:
+      - grain format ./3Trie.gr -o ./3Trie.gr
+      # - grain format ./3Trie.test.gr -o ./3Trie.test.gr
+  doc:
+    desc: Generates graindoc for the trie impl
+    cmds:
+      - grain doc ./3Trie.gr -o ./3Trie.md
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - rm -rf *.wasm
+      - rm -rf *.gro
+      - rm -rf ./3Trie.md
