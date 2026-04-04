@@ -3,6 +3,9 @@
 version: '3'
 
 includes:
+  bPlusTree:
+    taskfile: ./BPlusTree/Taskfile.yml
+    dir: ./BPlusTree
   intervalTree:
     taskfile: ./IntervalTree/Taskfile.yml
     dir: ./IntervalTree
@@ -27,6 +30,7 @@ tasks:
   test:
     desc: Tests the data structure impls
     cmds:
+      - task: bPlusTree:test
       - task: intervalTree:test
       - task: quadTree:test
       # - task: ropeString:test
@@ -34,6 +38,7 @@ tasks:
   format:
     desc: Formats the data structure impls
     cmds:
+      - task: bPlusTree:format
       - task: intervalTree:format
       - task: quadTree:format
       - task: ropeString:format
@@ -41,6 +46,7 @@ tasks:
   doc:
     desc: Generates graindoc for the data structure impls
     cmds:
+      - task: bPlusTree:doc
       - task: intervalTree:doc
       - task: quadTree:doc
       - task: ropeString:doc
@@ -48,6 +54,7 @@ tasks:
   clean:
     desc: Cleans up build artifacts
     cmds:
+      - task: bPlusTree:clean
       - task: intervalTree:clean
       - task: quadTree:clean
       - task: ropeString:clean

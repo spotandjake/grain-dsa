@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  default:
+    desc: By default we clean, format, document and test
+    cmds:
+      - task: clean
+      - task: format
+      - task: doc
+      - task: test
+  test:
+    desc: Tests the B+tree impl
+    cmds:
+      - grain ./bPlusTree.test.gr
+  format:
+    desc: Formats the B+tree impl
+    cmds:
+      - grain format ./bPlusTree.gr -o ./bPlusTree.gr
+      - grain format ./bPlusTree.test.gr -o ./bPlusTree.test.gr
+  doc:
+    desc: Generates graindoc for the B+tree impl
+    cmds:
+      - grain doc ./bPlusTree.gr -o ./bPlusTree.md
+  clean:
+    desc: Cleans up build artifacts
+    cmds:
+      - rm -rf *.wasm
+      - rm -rf *.gro
+      - rm -rf ./bPlusTree.md
