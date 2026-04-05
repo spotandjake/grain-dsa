@@ -171,6 +171,12 @@ Throws:
 
 * If a duplicate key is found in the list of records, since B+trees do not allow duplicate keys
 
+### BPlusTree.**delete**
+
+```grain
+delete: (key: kType, tree: BPlusTree<kType, rType>) => Bool
+```
+
 ### BPlusTree.**merge**
 
 ```grain
@@ -183,7 +189,7 @@ Merges two B+trees into a single B+tree containing all the entries from both tre
 
 NOTE: The new tree will have the same rank as `tree1`
 
-Time Complexity: O(n + m)
+Time Complexity: O(n + m) note that this is only the optimal time complexity if entires from both trees interleave a lot is worse because we have todo a lot of sorting, we could sort faster but its not worth it.
 
 Parameters:
 

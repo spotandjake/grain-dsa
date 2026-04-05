@@ -61,7 +61,20 @@ let tree = BPlusTree.make(3ul)
 let data = List.init(50, x => toString(x)) // 1 to 50 - test string data
 BPlusTree.bulkInsert(List.map(x => (x, x), data), tree)
 List.forEach(x => assert BPlusTree.search(x, tree) == Some(x), data) // Ensure the keys exist
-// TODO: BPlusTree.delete
+// BPlusTree.delete
+let tree = BPlusTree.make(3ul) // Test basic deletion
+let data = List.init(50, x => toString(x))
+BPlusTree.bulkInsert(List.map(x => (x, x), data), tree)
+assert BPlusTree.delete("100", tree) == false // Test deleting non existing key - should not throw
+List.forEach(fn=x => {
+  assert BPlusTree.search(x, tree) == Some(x) // Ensure the keys exist
+  assert BPlusTree.delete(x, tree) == true // Success
+  assert BPlusTree.search(x, tree) == None // Ensure the keys were deleted
+}, data) // Ensure the keys exist
+print(BPlusTree.Visualize.toDot(tree)) // Visualize the tree after all deletions - should be empty
+assert BPlusTree.isEmpty(tree) == true // Ensure the tree is empty after all deletions
+assert BPlusTree.delete("1", tree) == false // Test deleting non existing key - should not throw
+
 // BPlusTree.merge
 let basicTree = BPlusTree.make(4ul)
 BPlusTree.bulkInsert(List.init(30, i => (i, toString(i))), basicTree)

@@ -557,7 +557,192 @@ provide let bulkInsert = (
   return
 }
 
-// TODO: delete(key: KType, tree: BPlusTree<KType, RType>) -> Bool
+// Helpers for grain only - note: This is o(index) so not super efficient
+let listRemove = (index, lst) =>
+  List.append(List.take(index, lst), List.drop(index + 1, lst))
+
+let rec listSet = (index, value, lst) => match (lst) {
+  [] => fail "Impossible, index out of bounds",
+  [_, ...rest] when index == 0 => [value, ...rest],
+  [x, ...rest] => [x, ...listSet(index - 1, value, rest)],
+}
+
+let rec listLast = lst => match (lst) {
+  [] => fail "Invalid argument: empty list has no last element",
+  [x] => x,
+  [_, ...rest] => listLast(rest),
+}
+
+provide let delete = (key: kType, tree: BPlusTree<kType, rType>) => {
+  let minKeys = Number.floor(Uint32.toNumber(tree.rank) / 2)
+
+  let rec deleteHelp = (
+    node: Node<kType, rType>,
+    parent: Option<Node<kType, rType>>,
+    parentIndex,
+  ) => {
+    match (node) {
+      Leaf{ keys: keys_, values: values_, next } => {
+        let keys: List<kType> = unbox(keys_)
+        let values: List<rType> = unbox(values_)
+        let index = Internal.childIndex(keys, key) - 1
+        match (List.nth(index, keys)) {
+          Some(k) when compare(k, key) == 0 => {
+            // Remove key/value
+            keys_ := listRemove(index, keys)
+            values_ := listRemove(index, values)
+            // Underflow check
+            if (List.length(unbox(keys_)) > minKeys) return true
+            // Rebalance
+            match (parent) {
+              Some(Internal{ keys: pKeys_, children: pChildren_ }) => {
+                let pKeys = unbox(pKeys_)
+                let pChildren = unbox(pChildren_)
+                // Borrow left
+                if (parentIndex > 0) {
+                  let left = Option.unwrap(List.nth(parentIndex - 1, pChildren))
+                  match (left) {
+                    Leaf{ keys: lk_, values: lv_, _ } when List.length(
+                      unbox(lk_)
+                    )
+                      > minKeys => {
+                      // TODO: We could make this o(n) if we were working with an array this could be o(1) but I am doing this in a few o(n) passes because no sense in over optimizing grain code
+                      let borrowedKey = listLast(unbox(lk_))
+                      let borrowedValue = listLast(unbox(lv_))
+                      lk_ := List.take(List.length(unbox(lk_)) - 1, unbox(lk_))
+                      lv_ := List.take(List.length(unbox(lv_)) - 1, unbox(lv_))
+                      keys_ := [borrowedKey, ...unbox(keys_)]
+                      values_ := [borrowedValue, ...unbox(values_)]
+                      pKeys_ := listSet(parentIndex - 1, borrowedKey, pKeys)
+                      return true
+                    },
+                    _ => void,
+                  }
+                }
+
+                // Borrow right
+                if (parentIndex + 1 < List.length(pChildren)) {
+                  // TODO: It would probably make more sense to pass this alongside the parent node
+                  let right = Option.unwrap(
+                    List.nth(parentIndex + 1, pChildren)
+                  )
+                  match (right) {
+                    Leaf{ keys: rk_, values: rv_, _ } when List.length(
+                      unbox(rk_)
+                    )
+                      > minKeys => {
+                      let (rk, borrowedKey) = match (unbox(rk_)) {
+                        [] =>
+                          fail "Impossible, right sibling should have at least one key",
+                        [k, ...rest] => (rest, k),
+                      }
+                      let (rv, borrowedValue) = match (unbox(rv_)) {
+                        [] =>
+                          fail "Impossible, right sibling should have at least one value",
+                        [v, ...rest] => (rest, v),
+                      }
+                      rk_ := rk
+                      rv_ := rv
+                      // All we are trying todo here is append to the tail, this is a fast way to do it
+                      keys_ := List.append(unbox(keys_), [borrowedKey])
+                      values_ := List.append(unbox(values_), [borrowedValue])
+                      // TODO: Are we sure we need to update the parent key here?
+                      pKeys_ := listSet(
+                        parentIndex,
+                        Option.unwrap(List.head(unbox(rk_))),
+                        pKeys
+                      )
+                      return true
+                    },
+                    _ => void,
+                  }
+                }
+
+                // TODO: I think we only want to merge under a heuristic????
+                // Merge
+                if (parentIndex > 0) {
+                  // TODO: Should we be passing this down?
+                  let left = Option.unwrap(List.nth(parentIndex - 1, pChildren))
+                  match (left) {
+                    Leaf{ keys: lk_, values: lv_, next: lnext }
+                      when List.length(unbox(lk_)) + List.length(unbox(keys_))
+                        < Uint32.toNumber(tree.rank) - 1 => {
+                      lk_ := List.append(unbox(lk_), unbox(keys_))
+                      lv_ := List.append(unbox(lv_), unbox(values_))
+                      lnext := unbox(next)
+                      pKeys_ := listRemove(parentIndex - 1, unbox(pKeys_))
+                      pChildren_ := listRemove(parentIndex, unbox(pChildren_))
+                      return true
+                    },
+                    _ => void,
+                  }
+                } else if (parentIndex + 1 < List.length(pChildren)) {
+                  // Merge with right sibling
+                  let right = Option.unwrap(
+                    List.nth(parentIndex + 1, pChildren)
+                  )
+                  match (right) {
+                    Leaf{ keys: rk_, values: rv_, next: rnext }
+                      when List.length(unbox(rk_)) + List.length(unbox(keys_))
+                        < Uint32.toNumber(tree.rank) - 1 => {
+                      keys_ := List.append(unbox(keys_), unbox(rk_))
+                      values_ := List.append(unbox(values_), unbox(rv_))
+                      next := unbox(rnext)
+                      pKeys_ := listRemove(parentIndex, unbox(pKeys_))
+                      pChildren_ := listRemove(
+                        parentIndex + 1,
+                        unbox(pChildren_)
+                      )
+                      return true
+                    },
+                    _ => void,
+                  }
+                }
+              },
+              Some(Leaf{ _ }) => fail "Impossible, leaf cannot be parent",
+              None => void,
+            }
+            return true
+          },
+          _ => return false,
+        }
+      },
+      Internal{ keys: keys_, children: children_ } => {
+        // Traverse to child
+        let index = Internal.childIndex(unbox(keys_), key)
+        let child = Option.unwrap(List.nth(index, unbox(children_)))
+        // TODO: Instead of pulling out index we should pass left and right child down here.
+        let deleted = deleteHelp(child, Some(node), index)
+        if (!deleted) return false
+        // Collapse root if only one child
+        match ((parent, unbox(children_))) {
+          // List.length(children) == 1 means collapse, root means we are at the top so we can just set the root to the child
+          (None, [child]) => tree.root = child,
+          (_, _) => void,
+        }
+
+        // TODO: Reconstruct seperator keys on the way back up
+        // Update separator keys
+        // if (index < List.length(keys)) { // If we deleted the last key in the child
+        //   match (List.nth(index + 1, unbox(children_))) { // We need to update the separator key for the next child
+        //     Some(c) => match (c) {
+        //       Leaf{ keys: ck, _ } | Internal{ keys: ck, _ } =>
+        //         match (List.head(unbox(ck))) { // We update the separator key to be the minimum key of the next child
+        //           Some(newKey) => keys_ := listSet(index, newKey, keys),
+        //           _ => void,
+        //         },
+        //     },
+        //     _ => void,
+        //   }
+        // }
+
+        return true
+      },
+    }
+  }
+
+  deleteHelp(tree.root, None, 0)
+}
 
 /**
  * Merges two B+trees into a single B+tree containing all the entries from both trees.
@@ -753,11 +938,10 @@ provide module Visualize {
 // Implement a Key class that inherits from IComparable
 
 // Implement a record class that includes data members for the key and other values
-let tree1 = make(4ul)
-let data = List.init(12, i => (i, toString(i)))
-bulkInsert(data, tree1)
-let tree2 = make(4ul)
-let data = List.init(13, i => (12 + i, toString(12 + i)))
-bulkInsert(data, tree2)
-let tree = merge(tree1, tree2)
-print(Visualize.toDot(tree))
+
+// let tree = make(3ul) // Test basic deletion
+// let data = List.init(10, x => toString(x))
+// bulkInsert(List.map(x => (x, x), data), tree)
+// // print(Visualize.toDot(tree))
+// delete("0", tree)
+// print(Visualize.toDot(tree))
