@@ -177,6 +177,23 @@ Throws:
 delete: (key: kType, tree: BPlusTree<kType, rType>) => Bool
 ```
 
+Deletes an entry from the B+tree.
+
+Time Complexity: O(log n) where n is the number of keys in the tree
+
+Parameters:
+
+| param  | type                      | description                       |
+| ------ | ------------------------- | --------------------------------- |
+| `key`  | `kType`                   | The key to remove from the B+tree |
+| `tree` | `BPlusTree<kType, rType>` | The B+tree to delete the key from |
+
+Returns:
+
+| type   | description                                                        |
+| ------ | ------------------------------------------------------------------ |
+| `Bool` | `true` if the entry was removed, `false` if the key does not exist |
+
 ### BPlusTree.**merge**
 
 ```grain
