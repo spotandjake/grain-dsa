@@ -1,0 +1,113 @@
+module BPlusTreeTest
+
+from "list" include List
+
+from "./bPlusTree.gr" include BPlusTree
+
+// BPlusTree.make - Smoke test as we can't inspect the internal structure of the tree
+// TODO: Test rank being less than 3
+assert ignore(BPlusTree.make(3ul)) == void
+assert ignore(BPlusTree.make(4ul)) == void
+assert ignore(BPlusTree.make(1024ul)) == void
+// BPlusTree.insert / BPlusTree.search - we test these together as we can't inspect the internal structure of the tree
+let tree = BPlusTree.make(3ul)
+let data = [8, 3, 10, 1, 6, 9, 11, 2, 5, 7] // Generic random data test non sorted
+List.forEach(x => BPlusTree.insert(x, toString(x), tree), data)
+List.forEach(x => assert BPlusTree.search(x, tree) == Some(toString(x)), data)
+let tree = BPlusTree.make(20ul)
+let data = List.init(1000, x => x + 1) // 1 to 1000 - large test
+List.forEach(x => BPlusTree.insert(x, toString(x), tree), data)
+List.forEach(x => assert BPlusTree.search(x, tree) == Some(toString(x)), data) // Ensure the keys exist
+let tree = BPlusTree.make(3ul)
+let data = List.init(50, x => toString(x)) // 1 to 50 - test string data
+List.forEach(x => BPlusTree.insert(x, x, tree), data)
+List.forEach(x => assert BPlusTree.search(x, tree) == Some(x), data) // Ensure the keys exist
+// TODO: Test duplicate keys
+// BPlusTree.search
+let tree = BPlusTree.make(3ul)
+let data = [8, 3, 10, 1, 6]
+assert BPlusTree.search(11, tree) == None // empty tree
+List.forEach(x => BPlusTree.insert(x, toString(x), tree), data)
+assert BPlusTree.search(8, tree) == Some(toString(8))
+assert BPlusTree.search(3, tree) == Some(toString(3))
+assert BPlusTree.search(5, tree) == None // Non existing key
+assert BPlusTree.search(11, tree) == None // Non existing key
+// BPlusTree.isEmpty
+let tree = BPlusTree.make(3ul)
+assert BPlusTree.isEmpty(tree) == true
+BPlusTree.insert(1, "one", tree)
+assert BPlusTree.isEmpty(tree) == false
+// BPlusTree.range
+let tree = BPlusTree.make(3ul)
+let data = [8, 3, 10, 1, 6]
+List.forEach(x => BPlusTree.insert(x, toString(x), tree), data)
+assert BPlusTree.range(2, 7, tree) == ["3", "6"] // regular
+assert BPlusTree.range(0, 5, tree) == ["1", "3"] // regular
+assert BPlusTree.range(7, 11, tree) == ["8", "10"] // regular
+assert BPlusTree.range(-20, 2, tree) == ["1"] // lower bounds
+assert BPlusTree.range(-20, -1, tree) == [] // below lower bounds
+assert BPlusTree.range(9, 100, tree) == ["10"] // upper bounds
+assert BPlusTree.range(20, 100, tree) == [] // past upper bounds
+// BPlusTree.bulkInsert
+let tree = BPlusTree.make(3ul)
+let data = [8, 3, 10, 1, 6, 9, 11, 2, 5, 7] // Generic random data test non sorted
+BPlusTree.bulkInsert(List.map(x => (x, toString(x)), data), tree)
+List.forEach(x => assert BPlusTree.search(x, tree) == Some(toString(x)), data)
+let tree = BPlusTree.make(20ul)
+let data = List.init(1000, x => x + 1) // 1 to 1000 - large test
+BPlusTree.bulkInsert(List.map(x => (x, toString(x)), data), tree)
+List.forEach(x => assert BPlusTree.search(x, tree) == Some(toString(x)), data) // Ensure the keys exist
+let tree = BPlusTree.make(3ul)
+let data = List.init(50, x => toString(x)) // 1 to 50 - test string data
+BPlusTree.bulkInsert(List.map(x => (x, x), data), tree)
+List.forEach(x => assert BPlusTree.search(x, tree) == Some(x), data) // Ensure the keys exist
+// BPlusTree.delete
+let tree = BPlusTree.make(3ul) // Test basic deletion
+let data = List.init(50, x => toString(x))
+BPlusTree.bulkInsert(List.map(x => (x, x), data), tree)
+assert BPlusTree.delete("100", tree) == false // Test deleting non existing key - should not throw
+List.forEach(fn=x => {
+  assert BPlusTree.search(x, tree) == Some(x) // Ensure the keys exist
+  assert BPlusTree.delete(x, tree) == true // Success
+  assert BPlusTree.search(x, tree) == None // Ensure the keys were deleted
+}, data) // Ensure the keys exist
+assert BPlusTree.isEmpty(tree) == true // Ensure the tree is empty after all deletions
+assert BPlusTree.delete("1", tree) == false // Test deleting non existing key - should not throw
+
+// BPlusTree.merge
+let basicTree = BPlusTree.make(4ul)
+BPlusTree.bulkInsert(List.init(30, i => (i, toString(i))), basicTree)
+let tree1 = BPlusTree.make(4ul)
+let data = List.init(15, i => (i, toString(i)))
+BPlusTree.bulkInsert(data, tree1)
+let tree2 = BPlusTree.make(4ul)
+let data = List.init(15, i => (15 + i, toString(15 + i)))
+BPlusTree.bulkInsert(data, tree2)
+let tree = BPlusTree.merge(tree1, tree2)
+List.forEach(
+  x => assert BPlusTree.search(x, tree) == Some(toString(x)),
+  List.init(30, i => i)
+) // Ensure the keys exist
+assert tree == basicTree
+
+let tree1 = BPlusTree.make(4ul) // different ranks
+let data = List.init(15, i => (i, toString(i)))
+BPlusTree.bulkInsert(data, tree1)
+let tree2 = BPlusTree.make(10ul)
+let data = List.init(15, i => (15 + i, toString(15 + i)))
+BPlusTree.bulkInsert(data, tree2)
+let tree = BPlusTree.merge(tree1, tree2)
+List.forEach(
+  x => assert BPlusTree.search(x, tree) == Some(toString(x)),
+  List.init(30, i => i)
+) // Ensure the keys exist
+assert tree == basicTree
+// BPlusTree.fromList
+let data = List.init(30, i => (i, toString(i)))
+let tree = BPlusTree.fromList(4ul, data)
+List.forEach(
+  x => assert BPlusTree.search(x, tree) == Some(toString(x)),
+  List.init(30, i => i)
+)
+// TODO: BPlusTree.Visualize.ToMermaid - These should be basic snapshot tests
+// TODO: BPlusTree.Visualize.ToDot - These should be basic snapshot tests

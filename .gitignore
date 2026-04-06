@@ -3,6 +3,7 @@
 *.wasm
 *.mashtree
 *.modsig
+target/
 
 # Nix
 .direnv/
