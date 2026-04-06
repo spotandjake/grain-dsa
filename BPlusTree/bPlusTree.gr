@@ -995,10 +995,3 @@ provide module Visualize {
 // Implement a Key class that inherits from IComparable
 
 // Implement a record class that includes data members for the key and other values
-
-// let tree = make(3ul) // Test basic deletion
-// let data = List.init(10, x => toString(x))
-// bulkInsert(List.map(x => (x, x), data), tree)
-// // print(Visualize.toDot(tree))
-// delete("0", tree)
-// print(Visualize.toDot(tree))

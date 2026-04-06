@@ -71,7 +71,6 @@ List.forEach(fn=x => {
   assert BPlusTree.delete(x, tree) == true // Success
   assert BPlusTree.search(x, tree) == None // Ensure the keys were deleted
 }, data) // Ensure the keys exist
-print(BPlusTree.Visualize.toDot(tree)) // Visualize the tree after all deletions - should be empty
 assert BPlusTree.isEmpty(tree) == true // Ensure the tree is empty after all deletions
 assert BPlusTree.delete("1", tree) == false // Test deleting non existing key - should not throw
 

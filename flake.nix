@@ -9,7 +9,7 @@
       devShell = {
         packages = pkgs: [
           pkgs.go-task # task command - script runner
-          # grain.packages.${pkgs.system}.default # Grain
+          grain.packages.${pkgs.system}.default # Grain
         ];
       };
     });
